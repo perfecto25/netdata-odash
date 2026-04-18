@@ -39,6 +39,7 @@
   let activeNav = null; // { group, section } or null = show all
   let gaugeMaxes = {};
   let diskGaugeMaxes = {};
+  let netGaugeMaxes = {};
   let scrollHighlightHandler = null;
 
   // ── Scroll highlight ─────────────────────────────────────────────────────────
@@ -234,6 +235,7 @@
     currentNode = nodeId;
     gaugeMaxes = {};
     diskGaugeMaxes = {};
+    netGaugeMaxes = {};
     fetchGen++;
     resetCharts();
     startPolling();
@@ -253,6 +255,7 @@
       const card = document.createElement("div");
       card.className = "card";
       card.id = "card-" + def.id;
+      if (def.display === 'mountpoints' || def.display === 'nettable') card.style.gridColumn = '1 / -1';
       card.innerHTML =
         '<div class="card-header">' +
         '<span class="card-title">' +
@@ -292,8 +295,10 @@
     const defs = getVisibleCharts();
     let ok = 0;
 
-    const regularDefs = defs.filter((d) => d.display !== 'disktable');
-    const disktableDefs = defs.filter((d) => d.display === 'disktable');
+    const regularDefs    = defs.filter((d) => d.display !== 'disktable' && d.display !== 'mountpoints' && d.display !== 'nettable');
+    const disktableDefs  = defs.filter((d) => d.display === 'disktable');
+    const mountDefs      = defs.filter((d) => d.display === 'mountpoints');
+    const nettableDefs   = defs.filter((d) => d.display === 'nettable');
 
     const allTasks = regularDefs.map(async (def) => {
       try {
@@ -307,6 +312,10 @@
         if (parsed) {
           renderCard(def, parsed);
           ok++;
+        } else {
+          const wrap = document.getElementById("wrap-" + def.id);
+          if (wrap && !wrap.dataset.hasChart)
+            wrap.innerHTML = '<div style="color:var(--muted);padding:30px;text-align:center;font-size:12px">No data</div>';
         }
       } catch (e) {
         console.warn(def.chart, e);
@@ -321,6 +330,30 @@
           disktableDefs.forEach((def) => { renderDiskTable(def, diskInfo); ok++; });
         } catch (e) {
           console.warn('diskinfo', e);
+        }
+      })());
+    }
+
+    if (mountDefs.length) {
+      allTasks.push((async () => {
+        try {
+          const mountInfo = await apiFetch("/mountinfo", { node });
+          if (fetchGen !== gen) return;
+          mountDefs.forEach((def) => { renderMountPoints(def, mountInfo); ok++; });
+        } catch (e) {
+          console.warn('mountinfo', e);
+        }
+      })());
+    }
+
+    if (nettableDefs.length) {
+      allTasks.push((async () => {
+        try {
+          const netInfo = await apiFetch("/netinfo", { node });
+          if (fetchGen !== gen) return;
+          nettableDefs.forEach((def) => { renderNetTable(def, netInfo); ok++; });
+        } catch (e) {
+          console.warn('netinfo', e);
         }
       })());
     }
@@ -491,6 +524,95 @@
     };
 
     return new uPlot(opts, data, container);
+  }
+
+  // ── Donut chart ───────────────────────────────────────────────────────────────
+
+  function drawDonut(canvas, used, total, usedColor) {
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.clientWidth  || 160;
+    const H = canvas.clientHeight || 160;
+    canvas.width  = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    const c = canvas.getContext('2d');
+    c.scale(dpr, dpr);
+    const cx = W / 2, cy = H / 2;
+    const r  = Math.min(W, H) * 0.36;
+    const lw = r * 0.4;
+    c.lineWidth = lw;
+    c.lineCap   = 'butt';
+    c.beginPath();
+    c.arc(cx, cy, r, 0, Math.PI * 2);
+    c.strokeStyle = '#22c55e';
+    c.stroke();
+    const ratio = total > 0 ? Math.min(1, used / total) : 0;
+    if (ratio > 0.001) {
+      c.beginPath();
+      c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + ratio * Math.PI * 2);
+      c.strokeStyle = usedColor;
+      c.stroke();
+    }
+  }
+
+  // ── Mount points rendering ────────────────────────────────────────────────────
+
+  function renderMountPoints(def, info) {
+    const wrap = document.getElementById('wrap-' + def.id);
+    if (!wrap) return;
+    const { mounts, total_avail_gib, total_used_gib, total_avail_inodes, total_used_inodes } = info;
+    const totalSpace  = total_used_gib    + total_avail_gib;
+    const totalInodes = total_used_inodes + total_avail_inodes;
+
+    function donutCard(canvasId, label, usedLabel, availLabel) {
+      return '<div style="text-align:center">' +
+        '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">' + label + '</div>' +
+        '<canvas id="' + canvasId + '" style="width:160px;height:160px;display:block;margin:0 auto"></canvas>' +
+        '<div style="margin-top:6px;font-size:12px">' +
+          '<span style="color:#ef4444">' + usedLabel + '</span>' +
+          '&emsp;<span style="color:#22c55e">' + availLabel + '</span>' +
+        '</div>' +
+      '</div>';
+    }
+
+    const donutRow =
+      '<div style="display:flex;gap:60px;justify-content:center;margin-bottom:20px;flex-wrap:wrap">' +
+        donutCard(
+          'mp-space-'  + def.id, 'Space Usage',
+          'used '  + total_used_gib.toFixed(2)  + ' GiBy',
+          'avail ' + total_avail_gib.toFixed(2) + ' GiBy'
+        ) +
+        donutCard(
+          'mp-inodes-' + def.id, 'Files Usage',
+          'used '  + (total_used_inodes  / 1e6).toFixed(2) + ' M inodes',
+          'avail ' + (total_avail_inodes / 1e6).toFixed(2) + ' M inodes'
+        ) +
+      '</div>';
+
+    const rows = (mounts || []).map(function(m) {
+      return '<tr>' +
+        '<td style="text-align:left;color:var(--accent);font-family:monospace">' + m.mount + '</td>' +
+        '<td style="text-align:left">' + m.filesystem + '</td>' +
+        '<td>' + m.avail_gib.toFixed(2) + '</td>' +
+        '<td>' + m.used_gib.toFixed(2) + '</td>' +
+        '<td>' + m.reserved_gib.toFixed(2) + '</td>' +
+        '<td>' + (m.avail_inodes / 1e6).toFixed(2) + '</td>' +
+        '<td>' + (m.used_inodes  / 1e6).toFixed(2) + '</td>' +
+        '<td>' + (m.reserved_inodes / 1e6).toFixed(2) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    wrap.innerHTML = donutRow +
+      '<table class="disk-table"><thead><tr>' +
+        '<th style="text-align:left">Mount Point</th>' +
+        '<th style="text-align:left">Filesystem</th>' +
+        '<th>Avail GiBy</th><th>Used GiBy</th><th>Reserved GiBy</th>' +
+        '<th>Avail M inodes</th><th>Used M inodes</th><th>Reserved M inodes</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table>';
+
+    const sc = document.getElementById('mp-space-'  + def.id);
+    const ic = document.getElementById('mp-inodes-' + def.id);
+    if (sc) drawDonut(sc, total_used_gib,    totalSpace,  '#ef4444');
+    if (ic) drawDonut(ic, total_used_inodes, totalInodes, '#ef4444');
   }
 
   // ── Gauges ────────────────────────────────────────────────────────────────────
@@ -706,6 +828,67 @@
       drawGauge(canvas, value, max, g.color);
       const dp = value >= 100 ? 0 : value >= 10 ? 1 : 2;
       valEl.innerHTML = value.toFixed(dp) + '<small style="font-size:10px;color:var(--muted);font-weight:400;margin-left:2px"> ' + g.unit + '</small>';
+    });
+  }
+
+  // ── Network table rendering ───────────────────────────────────────────────────
+
+  const NET_GAUGE_DEFS = [
+    { key: 'total_recv_kbps', label: 'Total Inbound',  unit: 'Mb/s',     color: '#22c55e', scale: 1/1000 },
+    { key: 'total_sent_kbps', label: 'Total Outbound', unit: 'Mb/s',     color: '#ef4444', scale: 1/1000 },
+    { key: 'total_errors',    label: 'Total Errors',   unit: 'errors/s', color: '#eab308', scale: 1 },
+    { key: 'total_drops',     label: 'Total Drops',    unit: 'drops/s',  color: '#a855f7', scale: 1 },
+  ];
+
+  function renderNetTable(def, netInfo) {
+    const wrap = document.getElementById('wrap-' + def.id);
+    if (!wrap) return;
+    if (!netInfo || !netInfo.interfaces || !netInfo.interfaces.length) {
+      wrap.innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center">No interface data</div>';
+      return;
+    }
+
+    const gaugeCards = NET_GAUGE_DEFS.map(function(g, i) {
+      return '<div class="gauge-card" style="min-width:110px" data-ng="' + i + '">' +
+        '<div class="gauge-title">' + g.label + '</div>' +
+        '<canvas class="gauge-canvas"></canvas>' +
+        '<div class="gauge-val" style="color:' + g.color + '">—</div>' +
+        '</div>';
+    }).join('');
+
+    const rows = netInfo.interfaces.map(function(iface) {
+      return '<tr>' +
+        '<td>' + iface.name + '</td>' +
+        '<td>' + (iface.recv_kbps / 1000).toFixed(2) + '</td>' +
+        '<td>' + (iface.sent_kbps / 1000).toFixed(2) + '</td>' +
+        '<td>' + (iface.recv_pkts  / 1000).toFixed(2) + '</td>' +
+        '<td>' + (iface.sent_pkts  / 1000).toFixed(2) + '</td>' +
+        '<td>' + (iface.mcast_pkts / 1000).toFixed(2) + '</td>' +
+        '<td>' + iface.errors_in.toFixed(1)  + '</td>' +
+        '<td>' + iface.drops_in.toFixed(1)   + '</td>' +
+        '</tr>';
+    }).join('');
+
+    wrap.innerHTML =
+      '<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">' + gaugeCards + '</div>' +
+      '<table class="disk-table"><thead><tr>' +
+        '<th style="text-align:left">Interface</th>' +
+        '<th>Recv Mb/s</th><th>Sent Mb/s</th>' +
+        '<th>Recv K pps</th><th>Sent K pps</th><th>Mcast K pps</th>' +
+        '<th>Errors/s</th><th>Drops/s</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table>';
+
+    wrap.querySelectorAll('[data-ng]').forEach(function(card) {
+      const i   = parseInt(card.dataset.ng, 10);
+      const g   = NET_GAUGE_DEFS[i];
+      const val = (netInfo[g.key] || 0) * g.scale;
+      netGaugeMaxes[g.key] = Math.max(netGaugeMaxes[g.key] || 0, val);
+      const max   = niceMax(netGaugeMaxes[g.key] || 1);
+      const canvas = card.querySelector('canvas');
+      const valEl  = card.querySelector('.gauge-val');
+      drawGauge(canvas, val, max, g.color);
+      const dp = val >= 100 ? 0 : val >= 10 ? 1 : 2;
+      valEl.innerHTML = val.toFixed(dp) + '<small style="font-size:10px;color:var(--muted);font-weight:400;margin-left:2px"> ' + g.unit + '</small>';
     });
   }
 

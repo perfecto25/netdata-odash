@@ -12,6 +12,8 @@ require "./netdata/proxy"
 require "./netdata/nodeinfo"
 require "./netdata/diskinfo"
 require "./netdata/diskdata"
+require "./netdata/mountinfo"
+require "./netdata/netinfo"
 require "./charts/cpu"
 require "./charts/memory"
 require "./charts/load"
@@ -48,6 +50,19 @@ require "./charts/disk_ext_ops"
 require "./charts/disk_mops"
 require "./charts/disk_await"
 require "./charts/disk_ext_await"
+require "./charts/disk_svctm"
+require "./charts/disk_util"
+require "./charts/disk_busy"
+require "./charts/disk_backlog"
+require "./charts/disk_space_usage"
+require "./charts/disk_inodes_usage"
+require "./charts/mountpoints"
+require "./charts/disk_iotime"
+require "./charts/disk_ext_iotime"
+require "./charts/disk_qops"
+require "./charts/nettable"
+require "./charts/nfs_rpc"
+require "./charts/nfs_proc4"
 require "./frontend"
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -70,6 +85,10 @@ server = HTTP::Server.new do |ctx|
     handle_diskinfo(ctx)
   when "/diskdata"
     handle_diskdata(ctx)
+  when "/mountinfo"
+    handle_mountinfo(ctx)
+  when "/netinfo"
+    handle_netinfo(ctx)
   when "/data"
     handle_data(ctx)
   when "/proxy"
@@ -185,6 +204,45 @@ server = HTTP::Server.new do |ctx|
   when "/charts/disk_ext_await.js"
     ctx.response.headers["Content-Type"] = "application/javascript"
     ctx.response.print Charts::DiskExtAwait::JS
+  when "/charts/disk_svctm.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::DiskSvctm::JS
+  when "/charts/disk_util.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::DiskUtil::JS
+  when "/charts/disk_busy.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::DiskBusy::JS
+  when "/charts/disk_backlog.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::DiskBacklog::JS
+  when "/charts/disk_space_usage.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::DiskSpaceUsage::JS
+  when "/charts/disk_inodes_usage.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::DiskInodesUsage::JS
+  when "/charts/mountpoints.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::Mountpoints::JS
+  when "/charts/disk_iotime.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::DiskIotime::JS
+  when "/charts/disk_ext_iotime.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::DiskExtIotime::JS
+  when "/charts/disk_qops.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::DiskQops::JS
+  when "/charts/nettable.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::Nettable::JS
+  when "/charts/nfs_rpc.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::NfsRpc::JS
+  when "/charts/nfs_proc4.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::NfsProc4::JS
   else
     ctx.response.headers["Content-Type"] = "text/html; charset=utf-8"
     ctx.response.print Frontend::INDEX_HTML

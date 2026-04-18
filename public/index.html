@@ -415,7 +415,9 @@
                 border-bottom: 1px solid var(--border);
                 white-space: nowrap;
             }
-            .disk-table th:first-child { text-align: left; }
+            .disk-table th:first-child {
+                text-align: left;
+            }
             .disk-table td {
                 padding: 8px 12px;
                 text-align: right;
@@ -428,8 +430,12 @@
                 font-weight: 600;
                 font-family: monospace;
             }
-            .disk-table tbody tr:last-child td { border-bottom: none; }
-            .disk-table tbody tr:hover td { background: rgba(255,255,255,0.03); }
+            .disk-table tbody tr:last-child td {
+                border-bottom: none;
+            }
+            .disk-table tbody tr:hover td {
+                background: rgba(255, 255, 255, 0.03);
+            }
 
             .nav-item.active {
                 color: var(--accent);
@@ -510,6 +516,19 @@
         <script src="/charts/disk_mops.js"></script>
         <script src="/charts/disk_await.js"></script>
         <script src="/charts/disk_ext_await.js"></script>
+        <script src="/charts/disk_svctm.js"></script>
+        <script src="/charts/disk_util.js"></script>
+        <script src="/charts/disk_busy.js"></script>
+        <script src="/charts/disk_backlog.js"></script>
+        <script src="/charts/disk_space_usage.js"></script>
+        <script src="/charts/disk_inodes_usage.js"></script>
+        <script src="/charts/disk_iotime.js"></script>
+        <script src="/charts/disk_ext_iotime.js"></script>
+        <script src="/charts/disk_qops.js"></script>
+        <script src="/charts/mountpoints.js"></script>
+        <script src="/charts/nfs_rpc.js"></script>
+        <script src="/charts/nfs_proc4.js"></script>
+        <script src="/charts/nettable.js"></script>
         <script src="/charts/network.js"></script>
         <script src="/app.js"></script>
     </body>
