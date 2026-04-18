@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>Netdata O Dash</title>
+        <link
+            rel="icon"
+            type="image/svg+xml"
+            href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230f1117'/><text x='16' y='23' font-family='system-ui,sans-serif' font-weight='700' font-size='18' text-anchor='middle' fill='%2322c55e'>ND</text></svg>"
+        />
+        <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.iife.min.js"></script>
+        <link
+            href="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.min.css"
+            rel="stylesheet"
+        />
+        <style>
+            :root {
+                --bg: #0f1117;
+                --card: #1a1d27;
+                --border: #2a2d3a;
+                --accent: #00d4ff;
+                --text: #e2e8f0;
+                --muted: #6b7280;
+                --green: #22c55e;
+                --yellow: #eab308;
+                --red: #ef4444;
+            }
+
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font-family: "Inter", system-ui, sans-serif;
+                font-size: 14px;
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+                overflow: hidden;
+            }
+
+            /* ── Header ── */
+            header {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                padding: 12px 24px;
+                border-bottom: 1px solid var(--border);
+                background: var(--card);
+                flex-wrap: wrap;
+            }
+
+            header h1 {
+                font-size: 18px;
+                font-weight: 700;
+                color: var(--accent);
+                letter-spacing: 0.5px;
+                white-space: nowrap;
+            }
+
+            header h1 span {
+                color: var(--muted);
+                font-weight: 400;
+            }
+
+            /* ── Controls ── */
+            .ctrl-group {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .ctrl-label {
+                font-size: 11px;
+                color: var(--muted);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                white-space: nowrap;
+            }
+
+            select {
+                background: var(--bg);
+                color: var(--text);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-size: 13px;
+                cursor: pointer;
+            }
+            select:focus {
+                outline: none;
+                border-color: var(--accent);
+            }
+
+            #node-select {
+                min-width: 200px;
+            }
+
+            /* ── Time range buttons ── */
+            #time-ranges {
+                display: flex;
+                gap: 4px;
+                flex-wrap: wrap;
+            }
+
+            .tr-btn {
+                background: transparent;
+                border: 1px solid var(--border);
+                color: var(--muted);
+                border-radius: 6px;
+                padding: 5px 10px;
+                cursor: pointer;
+                font-size: 12px;
+                transition:
+                    border-color 0.15s,
+                    color 0.15s,
+                    background 0.15s;
+            }
+            .tr-btn:hover {
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+            .tr-btn.active {
+                background: var(--accent);
+                border-color: var(--accent);
+                color: #000;
+                font-weight: 600;
+            }
+
+            /* ── Refresh & status ── */
+            #refresh-btn {
+                background: transparent;
+                border: 1px solid var(--border);
+                color: var(--muted);
+                border-radius: 6px;
+                padding: 6px 12px;
+                cursor: pointer;
+                font-size: 13px;
+                transition:
+                    border-color 0.2s,
+                    color 0.2s;
+            }
+            #refresh-btn:hover {
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+
+            #status {
+                margin-left: auto;
+                font-size: 12px;
+                color: var(--muted);
+                white-space: nowrap;
+            }
+            #status.ok {
+                color: var(--green);
+            }
+            #status.err {
+                color: var(--red);
+            }
+
+            /* ── Metric card ── */
+            .card {
+                background: var(--card);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                padding: 18px;
+            }
+
+            .card-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: baseline;
+                margin-bottom: 14px;
+            }
+            .card-title {
+                font-size: 15px;
+                font-weight: 600;
+            }
+            .card-sub {
+                font-size: 12px;
+                color: var(--muted);
+            }
+
+            .stat-row {
+                display: flex;
+                gap: 16px;
+                margin-bottom: 12px;
+                flex-wrap: wrap;
+            }
+            .stat {
+                background: var(--bg);
+                border-radius: 6px;
+                padding: 8px 14px;
+                min-width: 85px;
+            }
+            .stat-label {
+                font-size: 11px;
+                color: var(--muted);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            .stat-value {
+                font-size: 20px;
+                font-weight: 700;
+                margin-top: 2px;
+            }
+
+            .chart-wrap {
+                width: 100%;
+                overflow: hidden;
+            }
+            .uplot,
+            .uplot * {
+                box-sizing: border-box;
+            }
+            .uplot canvas {
+                display: block;
+            }
+
+            #placeholder {
+                grid-column: 1 / -1;
+                text-align: center;
+                color: var(--muted);
+                padding: 60px;
+                font-size: 16px;
+            }
+
+            /* ── Gauge row ── */
+            #gauges {
+                display: flex;
+                gap: 10px;
+                padding: 10px 24px;
+                background: var(--card);
+                border-bottom: 1px solid var(--border);
+                overflow-x: auto;
+                flex-shrink: 0;
+                align-items: stretch;
+            }
+            #gauges:empty {
+                display: none;
+            }
+
+            .gauge-card {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                padding: 6px 10px 4px;
+                min-width: 110px;
+                flex-shrink: 0;
+            }
+            .gauge-title {
+                font-size: 10px;
+                color: var(--muted);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                white-space: nowrap;
+                text-align: center;
+            }
+            .gauge-canvas {
+                width: 110px;
+                height: 74px;
+                display: block;
+            }
+            .gauge-val {
+                font-size: 15px;
+                font-weight: 700;
+                line-height: 1;
+                margin-top: 1px;
+                text-align: center;
+            }
+            .gauge-val small {
+                font-size: 10px;
+                color: var(--muted);
+                font-weight: 400;
+                margin-left: 2px;
+            }
+            .gauge-sysinfo {
+                min-width: 155px;
+            }
+            .sysinfo-lines {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                padding: 4px 2px;
+                gap: 3px;
+                width: 100%;
+            }
+            .si-name {
+                font-size: 13px;
+                font-weight: 700;
+                color: var(--accent);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .si-row {
+                font-size: 11px;
+                color: var(--text);
+            }
+            .si-label {
+                color: var(--muted);
+                margin-right: 4px;
+            }
+
+            .gauge-text-body {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 13px;
+                font-weight: 600;
+                text-align: center;
+                padding: 4px 2px;
+                line-height: 1.4;
+            }
+
+            /* ── Page body layout ── */
+            #page {
+                display: flex;
+                flex: 1;
+                min-height: 0;
+                overflow: hidden;
+            }
+
+            /* ── Main content ── */
+            #main {
+                flex: 1;
+                overflow-y: auto;
+                padding: 24px;
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(540px, 1fr));
+                gap: 20px;
+                align-content: start;
+            }
+            #main.zoomed {
+                grid-template-columns: 1fr;
+            }
+
+            /* ── Sidebar ── */
+            #sidebar {
+                width: 220px;
+                min-width: 220px;
+                background: var(--card);
+                border-left: 1px solid var(--border);
+                overflow-y: auto;
+                padding: 16px 0;
+                flex-shrink: 0;
+            }
+
+            .nav-group-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 6px 16px;
+                font-size: 11px;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.8px;
+                color: var(--muted);
+                cursor: pointer;
+                user-select: none;
+            }
+            .nav-group-header:hover {
+                color: var(--text);
+            }
+            .nav-arrow {
+                font-size: 10px;
+                transition: transform 0.15s;
+            }
+            .nav-group.collapsed .nav-arrow {
+                transform: rotate(-90deg);
+            }
+            .nav-group.collapsed .nav-items {
+                display: none;
+            }
+
+            .nav-item {
+                display: block;
+                padding: 7px 16px 7px 28px;
+                font-size: 13px;
+                color: var(--muted);
+                cursor: pointer;
+                border-left: 3px solid transparent;
+                transition:
+                    color 0.15s,
+                    background 0.15s;
+            }
+            .nav-item:hover {
+                color: var(--text);
+                background: rgba(255, 255, 255, 0.04);
+            }
+            /* ── Disk table ── */
+            .disk-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 12px;
+            }
+            .disk-table th {
+                color: var(--muted);
+                font-weight: 600;
+                text-transform: uppercase;
+                font-size: 10px;
+                letter-spacing: 0.5px;
+                padding: 6px 12px;
+                text-align: right;
+                border-bottom: 1px solid var(--border);
+                white-space: nowrap;
+            }
+            .disk-table th:first-child { text-align: left; }
+            .disk-table td {
+                padding: 8px 12px;
+                text-align: right;
+                border-bottom: 1px solid var(--border);
+                white-space: nowrap;
+            }
+            .disk-table td:first-child {
+                text-align: left;
+                color: var(--accent);
+                font-weight: 600;
+                font-family: monospace;
+            }
+            .disk-table tbody tr:last-child td { border-bottom: none; }
+            .disk-table tbody tr:hover td { background: rgba(255,255,255,0.03); }
+
+            .nav-item.active {
+                color: var(--accent);
+                border-left-color: var(--accent);
+                background: rgba(0, 212, 255, 0.07);
+            }
+            .nav-item.scroll-active {
+                color: var(--text);
+                border-left-color: rgba(0, 212, 255, 0.45);
+                background: rgba(0, 212, 255, 0.04);
+            }
+            .nav-item.active.scroll-active {
+                color: var(--accent);
+                border-left-color: var(--accent);
+                background: rgba(0, 212, 255, 0.07);
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1 onclick="location.reload()" style="cursor: pointer">
+                Netdata <span>OpenDash</span>
+            </h1>
+
+            <div class="ctrl-group">
+                <span class="ctrl-label">Node</span>
+                <select id="node-select">
+                    <option value="">Loading…</option>
+                </select>
+            </div>
+
+            <div id="time-ranges"></div>
+
+            <button id="refresh-btn">↺ Refresh</button>
+            <span id="status">connecting…</span>
+        </header>
+
+        <div id="gauges"></div>
+
+        <div id="page">
+            <main id="main">
+                <div id="placeholder">Select a node above to view metrics.</div>
+            </main>
+            <aside id="sidebar"></aside>
+        </div>
+
+        <script src="/charts/cpu.js"></script>
+        <script src="/charts/load.js"></script>
+        <script src="/charts/clock.js"></script>
+        <script src="/charts/clock_offset.js"></script>
+        <script src="/charts/clock_sync_state.js"></script>
+        <script src="/charts/memory.js"></script>
+        <script src="/charts/mem_available.js"></script>
+        <script src="/charts/mem_pgfaults.js"></script>
+        <script src="/charts/mem_reclaiming.js"></script>
+        <script src="/charts/mem_writeback.js"></script>
+        <script src="/charts/mem_pgpgio.js"></script>
+        <script src="/charts/mem_hugepages.js"></script>
+        <script src="/charts/mem_thp_collapse.js"></script>
+        <script src="/charts/mem_thp_compact.js"></script>
+        <script src="/charts/mem_thp_details.js"></script>
+        <script src="/charts/mem_thp_faults.js"></script>
+        <script src="/charts/mem_thp_file.js"></script>
+        <script src="/charts/mem_thp_split.js"></script>
+        <script src="/charts/mem_thp_swapout.js"></script>
+        <script src="/charts/mem_thp_zero.js"></script>
+        <script src="/charts/mem_balloon.js"></script>
+        <script src="/charts/mem_kernel.js"></script>
+        <script src="/charts/mem_slab.js"></script>
+        <script src="/charts/mem_hwcorrupt.js"></script>
+        <script src="/charts/disktable.js"></script>
+        <script src="/charts/disk.js"></script>
+        <script src="/charts/disk_ext_io.js"></script>
+        <script src="/charts/disk_avgsz.js"></script>
+        <script src="/charts/disk_ext_avgsz.js"></script>
+        <script src="/charts/disk_ops.js"></script>
+        <script src="/charts/disk_ext_ops.js"></script>
+        <script src="/charts/disk_mops.js"></script>
+        <script src="/charts/disk_await.js"></script>
+        <script src="/charts/disk_ext_await.js"></script>
+        <script src="/charts/network.js"></script>
+        <script src="/app.js"></script>
+    </body>
+</html>
