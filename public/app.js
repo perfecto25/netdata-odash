@@ -19,6 +19,13 @@
 
   const POINTS = 300;
 
+  const DEFAULT_COLORS = [
+    '#00d4ff', '#22c55e', '#f97316', '#ef4444', '#eab308',
+    '#a855f7', '#06b6d4', '#84cc16', '#fb923c', '#f43f5e',
+    '#8b5cf6', '#10b981', '#fbbf24', '#60a5fa', '#e879f9',
+    '#34d399', '#fb7185', '#38bdf8',
+  ];
+
   const GAUGE_DEFS = [
     { id: 'uptime',  title: 'Uptime',     chart: 'system.uptime', dim: 'uptime', display: 'text',               color: '#00d4ff' },
     { id: 'cpu',     title: 'CPU',        chart: 'system.cpu',    dim: null,     unit: '%',      max: 100,      color: '#00d4ff' },
@@ -26,8 +33,8 @@
     { id: 'swap',    title: 'Used Swap',  chart: 'system.swap',   dim: 'used',   unit: '%',      max: 'swap%',  color: '#a855f7' },
     { id: 'disk_r',  title: 'Disk Read',  chart: 'system.io',     dim: 'in',     unit: 'KiB/s',  max: 'auto',   color: '#22c55e' },
     { id: 'disk_w',  title: 'Disk Write', chart: 'system.io',     dim: 'out',    unit: 'KiB/s',  max: 'auto',   color: '#ef4444' },
-    { id: 'net_in',  title: 'Net In',     chart: 'system.net',    dim: 'received',unit: 'kbit/s', max: 'auto',  color: '#00d4ff' },
-    { id: 'net_out', title: 'Net Out',    chart: 'system.net',    dim: 'sent',   unit: 'kbit/s', max: 'auto',   color: '#f97316' },
+    { id: 'net_in',  title: 'Net In',  chart: 'system.net', dim: 'received', unit: 'kbit/s', max: 'auto', color: '#00d4ff' },
+    { id: 'net_out', title: 'Net Out', chart: 'system.net', dim: 'sent',     unit: 'kbit/s', max: 'auto', color: '#f97316' },
   ];
 
   let currentNode = null;
@@ -40,6 +47,7 @@
   let gaugeMaxes = {};
   let diskGaugeMaxes = {};
   let netGaugeMaxes = {};
+  let gaugeTableMaxes = {};
   let scrollHighlightHandler = null;
 
   // ── Scroll highlight ─────────────────────────────────────────────────────────
@@ -236,6 +244,7 @@
     gaugeMaxes = {};
     diskGaugeMaxes = {};
     netGaugeMaxes = {};
+    gaugeTableMaxes = {};
     fetchGen++;
     resetCharts();
     startPolling();
@@ -467,13 +476,11 @@
     const W = container.clientWidth || 500;
 
     const series = [{}].concat(
-      dims.map((d, i) =>
-        makeSeriesDef(
-          d,
-          (chartColors || def.colors)[i % (chartColors || def.colors).length],
-          def.stacked,
-        ),
-      ),
+      dims.map((d, i) => {
+        const palette = chartColors || def.colors || [];
+        const color = i < palette.length ? palette[i] : DEFAULT_COLORS[i % DEFAULT_COLORS.length];
+        return makeSeriesDef(d, color, def.stacked);
+      }),
     );
 
     function fmtTime(u, vals) {
@@ -892,12 +899,73 @@
     });
   }
 
+  // ── Gauge table rendering ─────────────────────────────────────────────────────
+
+  function renderGaugeTable(def, parsed) {
+    const statsEl = document.getElementById("stats-" + def.id);
+    const wrap = document.getElementById("wrap-" + def.id);
+    if (!wrap) return;
+    if (statsEl) statsEl.innerHTML = '';
+
+    const palette = def.colors || DEFAULT_COLORS;
+    const lastVals = parsed.series.map(function(s) {
+      const v = s[s.length - 1];
+      return v == null ? 0 : v;
+    });
+    const total = lastVals.reduce(function(a, b) { return a + b; }, 0);
+
+    gaugeTableMaxes[def.id] = Math.max(gaugeTableMaxes[def.id] || 0, total);
+    const gaugeMax = niceMax(gaugeTableMaxes[def.id] || 1);
+
+    const canvasId = 'gtc-' + def.id;
+
+    const rows = parsed.labels.map(function(lbl, i) {
+      const color = i < palette.length ? palette[i] : DEFAULT_COLORS[i % DEFAULT_COLORS.length];
+      const val = lastVals[i];
+      return '<tr>' +
+        '<td style="text-align:left;padding:3px 12px 3px 0">' +
+          '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + color + ';margin-right:6px"></span>' +
+          lbl +
+        '</td>' +
+        '<td style="text-align:right;padding:3px 0;color:var(--text)">' + val.toFixed(1) + '</td>' +
+        '<td style="text-align:right;padding:3px 0 3px 8px;color:var(--muted);font-size:11px">' + def.unit + '</td>' +
+      '</tr>';
+    }).join('');
+
+    wrap.innerHTML =
+      '<div style="display:flex;gap:28px;align-items:center;flex-wrap:wrap">' +
+        '<div style="text-align:center;flex-shrink:0">' +
+          '<canvas id="' + canvasId + '" style="width:110px;height:74px;display:block"></canvas>' +
+          '<div style="font-size:18px;font-weight:700;color:' + (palette[0] || '#00d4ff') + ';margin-top:4px">' +
+            total.toFixed(1) +
+            '<small style="font-size:11px;color:var(--muted);font-weight:400;margin-left:3px">' + def.unit + '</small>' +
+          '</div>' +
+        '</div>' +
+        '<table style="font-size:12px;color:var(--text);border-collapse:collapse">' +
+          '<thead><tr>' +
+            '<th style="text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding-bottom:6px">Dimension</th>' +
+            '<th style="text-align:right;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding-bottom:6px;padding-left:12px" colspan="2">Value ' + def.unit + '</th>' +
+          '</tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+        '</table>' +
+      '</div>';
+
+    const canvas = document.getElementById(canvasId);
+    if (canvas) drawGauge(canvas, total, gaugeMax, palette[0] || '#00d4ff');
+  }
+
   // ── Card rendering ────────────────────────────────────────────────────────────
 
   function renderCard(def, parsed) {
     const statsEl = document.getElementById("stats-" + def.id);
     const wrap = document.getElementById("wrap-" + def.id);
     if (!statsEl || !wrap) return;
+
+    // Special: gauge + dimension table
+    if (def.display === 'gaugetable') {
+      renderGaugeTable(def, parsed);
+      return;
+    }
 
     // Special: uptime text display
     if (def.display === 'uptime') {

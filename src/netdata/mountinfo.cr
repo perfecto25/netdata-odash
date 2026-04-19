@@ -28,9 +28,7 @@ def handle_mountinfo(ctx : HTTP::Server::Context)
   node = ctx.request.query_params["node"]? || ""
   ctx.response.headers["Content-Type"] = "application/json"
 
-  charts_path = node.empty? ? "/api/v1/charts" : "/host/#{node}/api/v1/charts"
-  chart_json  = JSON.parse(netdata_get(charts_path))
-  charts_hash = chart_json["charts"]?.try(&.as_h) || {} of String => JSON::Any
+  charts_hash = cached_charts(node)
 
   space_keys = charts_hash.keys
     .select { |k| k.starts_with?("disk_space.") }

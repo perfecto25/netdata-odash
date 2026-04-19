@@ -23,12 +23,7 @@ def handle_netinfo(ctx : HTTP::Server::Context)
   cors(ctx)
   node = ctx.request.query_params["node"]? || ""
 
-  charts_path = node.empty? ? "/api/v1/charts" : "/host/#{node}/api/v1/charts"
-  body        = netdata_get(charts_path)
-  parsed      = JSON.parse(body)
-  chart_keys  = parsed["charts"]?.try(&.as_h.keys) || [] of String
-
-  interfaces = chart_keys
+  interfaces = cached_chart_keys(node)
     .select { |k| k.starts_with?("net.") }
     .map    { |k| k.sub("net.", "") }
     .uniq
