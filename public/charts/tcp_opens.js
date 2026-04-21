@@ -7,5 +7,5 @@ window.CHARTS.tcp_opens = {
   unit:    'conns/s',
   stacked: false,
   colors:  ['#22c55e', '#f97316'],
-  nav:     { group: 'Network', section: 'TCP' },
+  nav:     { group: 'Protocol', section: 'TCP' },
 };

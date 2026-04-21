@@ -30,7 +30,7 @@
     { id: 'uptime',  title: 'Uptime',     chart: 'system.uptime', dim: 'uptime', display: 'text',               color: '#00d4ff' },
     { id: 'cpu',     title: 'CPU',        chart: 'system.cpu',    dim: null,     unit: '%',      max: 100,      color: '#00d4ff' },
     { id: 'ram',     title: 'Used RAM',   chart: 'system.ram',    dim: 'used',   unit: '%',      max: 'ram%',   color: '#eab308' },
-    { id: 'swap',    title: 'Used Swap',  chart: 'system.swap',   dim: 'used',   unit: '%',      max: 'swap%',  color: '#a855f7' },
+    { id: 'swap',    title: 'Used Swap',  chart: 'mem.swap',      dim: 'used',   unit: '%',      max: 'swap%',  color: '#a855f7' },
     { id: 'disk_r',  title: 'Disk Read',  chart: 'system.io',     dim: 'in',     unit: 'KiB/s',  max: 'auto',   color: '#22c55e' },
     { id: 'disk_w',  title: 'Disk Write', chart: 'system.io',     dim: 'out',    unit: 'KiB/s',  max: 'auto',   color: '#ef4444' },
     { id: 'net_in',  title: 'Net In',  chart: 'system.net', dim: 'received', unit: 'kbit/s', max: 'auto', color: '#00d4ff' },
@@ -44,6 +44,7 @@
   let pollTimer = null;
   let fetchGen = 0;
   let activeNav = null; // { group, section } or null = show all
+  let searchFilter = "";
   let gaugeMaxes = {};
   let diskGaugeMaxes = {};
   let netGaugeMaxes = {};
@@ -95,6 +96,10 @@
 
   function getVisibleCharts() {
     const all = Object.values(window.CHARTS || {});
+    if (searchFilter) {
+      const q = searchFilter.toLowerCase();
+      return all.filter((d) => d.title && d.title.toLowerCase().includes(q));
+    }
     if (!activeNav) return all;
     return all.filter(
       (d) =>
@@ -260,27 +265,54 @@
     const main = $("main");
     main.classList.toggle("zoomed", activeNav !== null);
     main.innerHTML = "";
+    let rowWrapper = null;
     getVisibleCharts().forEach((def) => {
       const card = document.createElement("div");
       card.className = "card";
       card.id = "card-" + def.id;
-      if (def.display === 'mountpoints' || def.display === 'nettable') card.style.gridColumn = '1 / -1';
+      if (def.row) {
+        if (!rowWrapper) {
+          rowWrapper = document.createElement("div");
+          rowWrapper.style.cssText = 'grid-column:1/-1;display:flex;gap:16px;align-items:stretch;';
+          main.appendChild(rowWrapper);
+        }
+        card.style.cssText = 'flex:1 1 0;min-width:0;';
+        rowWrapper.appendChild(card);
+      } else {
+        rowWrapper = null;
+        if (def.display === 'mountpoints' || def.display === 'nettable' || def.display === 'servicetable') card.style.gridColumn = '1 / -1';
+        main.appendChild(card);
+      }
       card.innerHTML =
         '<div class="card-header">' +
-        '<span class="card-title">' +
-        def.title +
-        "</span>" +
-        '<span class="card-sub">' +
-        def.sub +
-        "</span>" +
-        "</div>" +
-        '<div class="stat-row" id="stats-' +
-        def.id +
-        '"></div>' +
-        '<div class="chart-wrap" id="wrap-' +
-        def.id +
-        '"></div>';
-      main.appendChild(card);
+        '<span class="card-title">' + def.title + '</span>' +
+        '<span class="card-sub">' + def.sub + '</span>' +
+        '<button class="card-expand-btn" title="Expand">⛶</button>' +
+        '</div>' +
+        '<div class="stat-row" id="stats-' + def.id + '"></div>' +
+        '<div class="chart-wrap" id="wrap-' + def.id + '"></div>';
+
+      card.querySelector('.card-expand-btn').addEventListener('click', function() {
+        const expanding = !card.classList.contains('expanded');
+        document.querySelectorAll('.card.expanded').forEach(function(c) {
+          c.classList.remove('expanded');
+          c.querySelector('.card-expand-btn').textContent = '⛶';
+        });
+        if (expanding) {
+          card.classList.add('expanded');
+          this.textContent = '✕';
+        }
+        const ch = charts[def.id];
+        if (ch) {
+          setTimeout(function() {
+            const wrap = document.getElementById('wrap-' + def.id);
+            if (!wrap) return;
+            const w = wrap.clientWidth || 500;
+            const h = expanding ? Math.max(400, window.innerHeight - 180) : 220;
+            ch.setSize({ width: w, height: h });
+          }, 0);
+        }
+      });
     });
     setupScrollHighlight();
   }
@@ -304,10 +336,11 @@
     const defs = getVisibleCharts();
     let ok = 0;
 
-    const regularDefs    = defs.filter((d) => d.display !== 'disktable' && d.display !== 'mountpoints' && d.display !== 'nettable');
-    const disktableDefs  = defs.filter((d) => d.display === 'disktable');
-    const mountDefs      = defs.filter((d) => d.display === 'mountpoints');
-    const nettableDefs   = defs.filter((d) => d.display === 'nettable');
+    const regularDefs       = defs.filter((d) => d.display !== 'disktable' && d.display !== 'mountpoints' && d.display !== 'nettable' && d.display !== 'servicetable');
+    const disktableDefs     = defs.filter((d) => d.display === 'disktable');
+    const mountDefs         = defs.filter((d) => d.display === 'mountpoints');
+    const nettableDefs      = defs.filter((d) => d.display === 'nettable');
+    const servicetableDefs  = defs.filter((d) => d.display === 'servicetable');
 
     const allTasks = regularDefs.map(async (def) => {
       try {
@@ -327,7 +360,7 @@
             wrap.innerHTML = '<div style="color:var(--muted);padding:30px;text-align:center;font-size:12px">No data</div>';
         }
       } catch (e) {
-        console.warn(def.chart, e);
+        if (!(e instanceof SyntaxError)) console.warn(def.id, e);
       }
     });
 
@@ -363,6 +396,18 @@
           nettableDefs.forEach((def) => { renderNetTable(def, netInfo); ok++; });
         } catch (e) {
           console.warn('netinfo', e);
+        }
+      })());
+    }
+
+    if (servicetableDefs.length) {
+      allTasks.push((async () => {
+        try {
+          const serviceInfo = await apiFetch("/serviceinfo", { node });
+          if (fetchGen !== gen) return;
+          servicetableDefs.forEach((def) => { renderServiceTable(def, serviceInfo); ok++; });
+        } catch (e) {
+          console.warn('serviceinfo', e);
         }
       })());
     }
@@ -454,6 +499,68 @@
 
   // ── uPlot ─────────────────────────────────────────────────────────────────────
 
+  function tooltipPlugin(displayUnit) {
+    let tooltip = null;
+    return {
+      hooks: {
+        init: function(u) {
+          tooltip = document.createElement('div');
+          tooltip.style.cssText = 'position:fixed;background:#1a1d27;border:1px solid #2a2d3a;border-radius:6px;padding:8px 12px;font-size:12px;pointer-events:none;display:none;z-index:1000;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.5)';
+          document.body.appendChild(tooltip);
+
+          u.over.addEventListener('mousemove', function(e) {
+            const rect  = u.over.getBoundingClientRect();
+            const xPx   = e.clientX - rect.left;
+            const xVal  = u.posToVal(xPx, 'x');
+            const times = u.data[0];
+
+            let idx = 0, minDist = Infinity;
+            for (let i = 0; i < times.length; i++) {
+              const dist = Math.abs(times[i] - xVal);
+              if (dist < minDist) { minDist = dist; idx = i; }
+            }
+
+            const ts = times[idx];
+            const d  = new Date(ts * 1000);
+            const hh = d.getHours().toString().padStart(2, '0');
+            const mm = d.getMinutes().toString().padStart(2, '0');
+            const ss = d.getSeconds().toString().padStart(2, '0');
+            const dp = displayUnit === 'GiB' ? 2 : 1;
+
+            let html = '<div style="color:#6b7280;margin-bottom:5px;font-size:11px">' + hh + ':' + mm + ':' + ss + '</div>';
+            u.series.slice(1).forEach(function(s, i) {
+              const v   = u.data[i + 1] && u.data[i + 1][idx];
+              const col = typeof s.stroke === 'string' ? s.stroke : '#00d4ff';
+              const val = v == null ? '—' : v.toFixed(dp);
+              html += '<div style="display:flex;align-items:center;gap:6px;margin-top:3px">' +
+                '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;flex-shrink:0;background:' + col + '"></span>' +
+                '<span style="color:#9ca3af">' + s.label + '</span>' +
+                '<span style="font-weight:600;padding-left:10px;color:#e2e8f0">' + val + '</span>' +
+                '<span style="color:#6b7280;font-size:11px;margin-left:2px">' + displayUnit + '</span>' +
+                '</div>';
+            });
+
+            tooltip.innerHTML = html;
+            tooltip.style.display = 'block';
+
+            let tx = e.clientX + 14;
+            if (tx + tooltip.offsetWidth > window.innerWidth - 8) tx = e.clientX - tooltip.offsetWidth - 14;
+            let ty = e.clientY - 10;
+            if (ty + tooltip.offsetHeight > window.innerHeight - 8) ty = e.clientY - tooltip.offsetHeight - 4;
+            tooltip.style.left = tx + 'px';
+            tooltip.style.top  = ty + 'px';
+          });
+
+          u.over.addEventListener('mouseleave', function() { tooltip.style.display = 'none'; });
+        },
+        destroy: function() {
+          if (tooltip && tooltip.parentNode) tooltip.parentNode.removeChild(tooltip);
+          tooltip = null;
+        },
+      },
+    };
+  }
+
   function makeSeriesDef(label, color, stacked) {
     return {
       label,
@@ -525,6 +632,7 @@
         x: { time: true },
         y: chartYMax ? { range: [0, chartYMax] } : {},
       },
+      plugins: [tooltipPlugin(displayUnit)],
       cursor: { stroke: "#ffffff33" },
       legend: { show: true },
       padding: [10, 10, 0, 0],
@@ -691,18 +799,37 @@
     if (!card) return;
     try {
       const info = await apiFetch('/nodeinfo', { node: node });
+      const ramGib = info.ram_total ? (parseInt(info.ram_total) / (1024 * 1024 * 1024)).toFixed(0) + ' GiB' : '—';
+      const osLabel = [info.os_name, info.os_version].filter(Boolean).join(' ') || '—';
       card.querySelector('.sysinfo-lines').innerHTML =
         '<div class="si-name">' + (info.hostname || node) + '</div>' +
-        '<div class="si-row"><span class="si-label">OS</span>'     + (info.os_version  || '—') + '</div>' +
-        '<div class="si-row"><span class="si-label">Family</span>' + (info.os_id_like  || '—') + '</div>' +
-        '<div class="si-row"><span class="si-label">Arch</span>'   + (info.architecture|| '—') + '</div>';
+        '<div class="si-row"><span class="si-label">OS</span>'   + osLabel              + '</div>' +
+        '<div class="si-row"><span class="si-label">Arch</span>' + (info.architecture || '—') + '</div>' +
+        '<div class="si-row"><span class="si-label">CPUs</span>' + (info.cores_total  || '—') + '</div>' +
+        '<div class="si-row"><span class="si-label">RAM</span>'  + ramGib               + '</div>';
     } catch(e) {}
   }
 
-  function renderGauges(dataMap) {
+  function renderGauges(dataMap, diskInfo) {
     GAUGE_DEFS.forEach(function(def) {
       const card = document.getElementById('gauge-' + def.id);
       if (!card) return;
+
+      // Disk gauges: always use /diskinfo totals (system.io dim names vary across Netdata builds)
+      if ((def.id === 'disk_r' || def.id === 'disk_w') && diskInfo) {
+        const value = def.id === 'disk_r' ? (diskInfo.total_reads_kib || 0) : (diskInfo.total_writes_kib || 0);
+        gaugeMaxes[def.id] = Math.max(gaugeMaxes[def.id] || 0, value);
+        const max = niceMax(gaugeMaxes[def.id] || 1);
+        const canvas = card.querySelector('canvas');
+        const valEl  = card.querySelector('.gauge-val');
+        if (canvas && valEl) {
+          drawGauge(canvas, value, max, def.color);
+          const dp = value >= 100 ? 0 : value >= 10 ? 1 : 2;
+          valEl.innerHTML = value.toFixed(dp) + '<small> ' + def.unit + '</small>';
+        }
+        return;
+      }
+
       const raw = dataMap[def.chart];
       if (!raw || !raw.data || !raw.data.length) return;
 
@@ -761,13 +888,21 @@
     const chartIds = [];
     GAUGE_DEFS.forEach(function(d) { if (chartIds.indexOf(d.chart) < 0) chartIds.push(d.chart); });
     const dataMap = {};
-    await Promise.allSettled(chartIds.map(async function(chart) {
-      try {
-        const raw = await apiFetch('/data', { node: currentNode, chart: chart, after: '-300', points: 60 });
-        if (raw && raw.data && raw.data.length) dataMap[chart] = raw;
-      } catch(e) {}
-    }));
-    renderGauges(dataMap);
+    let diskInfo = null;
+
+    await Promise.allSettled([
+      ...chartIds.map(async function(chart) {
+        try {
+          const raw = await apiFetch('/data', { node: currentNode, chart: chart, after: '-300', points: 60 });
+          if (raw && raw.data && raw.data.length) dataMap[chart] = raw;
+        } catch(e) {}
+      }),
+      (async function() {
+        try { diskInfo = await apiFetch('/diskinfo', { node: currentNode }); } catch(e) {}
+      })(),
+    ]);
+
+    renderGauges(dataMap, diskInfo);
   }
 
   // ── Disk table rendering ──────────────────────────────────────────────────────
@@ -897,6 +1032,77 @@
       const dp = val >= 100 ? 0 : val >= 10 ? 1 : 2;
       valEl.innerHTML = val.toFixed(dp) + '<small style="font-size:10px;color:var(--muted);font-weight:400;margin-left:2px"> ' + g.unit + '</small>';
     });
+  }
+
+  // ── Service table rendering ───────────────────────────────────────────────────
+
+  function renderServiceTable(def, serviceInfo) {
+    const wrap = document.getElementById('wrap-' + def.id);
+    if (!wrap) return;
+    if (!serviceInfo || !serviceInfo.services || !serviceInfo.services.length) {
+      wrap.innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center">No service data</div>';
+      return;
+    }
+
+    const cols = [
+      { label: 'Service',          key: '_name',       left: true,  def: 1  },
+      { label: 'CPU %',            key: '_cpu',        left: false, def: -1 },
+      { label: 'Mem MiB',          key: 'mem_mib',     left: false, def: -1 },
+      { label: 'Disk Read KiB/s',  key: 'disk_read',   left: false, def: -1 },
+      { label: 'Disk Write KiB/s', key: 'disk_write',  left: false, def: -1 },
+    ];
+
+    const data = serviceInfo.services.map(function(svc) {
+      return {
+        _name:      svc.name,
+        _cpu:       (svc.cpu_user || 0) + (svc.cpu_system || 0),
+        mem_mib:    svc.mem_mib    || 0,
+        disk_read:  svc.disk_read  || 0,
+        disk_write: svc.disk_write || 0,
+      };
+    });
+
+    let sortCol = 1;
+    let sortDir = -1;
+
+    function buildTable() {
+      const sorted = data.slice().sort(function(a, b) {
+        const av = a[cols[sortCol].key];
+        const bv = b[cols[sortCol].key];
+        return sortDir * (typeof av === 'string' ? av.localeCompare(bv) : (av - bv));
+      });
+
+      const headers = cols.map(function(col, i) {
+        const arrow = i === sortCol ? (sortDir === 1 ? ' ▲' : ' ▼') : '';
+        const align = col.left ? 'text-align:left;' : '';
+        return '<th style="' + align + 'cursor:pointer;user-select:none" data-ci="' + i + '">' + col.label + arrow + '</th>';
+      }).join('');
+
+      const rows = sorted.map(function(svc) {
+        return '<tr>' + cols.map(function(col) {
+          const v = svc[col.key];
+          const style = col.left ? 'text-align:left;color:var(--accent);font-family:monospace' : '';
+          const disp  = col.left ? v : (col.key === 'mem_mib' ? v.toFixed(1) : v.toFixed(2));
+          return '<td style="' + style + '">' + disp + '</td>';
+        }).join('') + '</tr>';
+      }).join('');
+
+      wrap.innerHTML =
+        '<div style="max-height:420px;overflow-y:auto">' +
+        '<table class="disk-table"><thead><tr>' + headers + '</tr></thead>' +
+        '<tbody>' + rows + '</tbody></table></div>';
+
+      wrap.querySelectorAll('th[data-ci]').forEach(function(th) {
+        th.addEventListener('click', function() {
+          const ci = parseInt(th.dataset.ci, 10);
+          sortDir = ci === sortCol ? -sortDir : cols[ci].def;
+          sortCol = ci;
+          buildTable();
+        });
+      });
+    }
+
+    buildTable();
   }
 
   // ── Gauge table rendering ─────────────────────────────────────────────────────
@@ -1061,6 +1267,15 @@
   });
 
   $("refresh-btn").addEventListener("click", () => {
+    if (currentNode) {
+      fetchGen++;
+      resetCharts();
+      startPolling();
+    }
+  });
+
+  $("chart-search").addEventListener("input", (e) => {
+    searchFilter = e.target.value.trim();
     if (currentNode) {
       fetchGen++;
       resetCharts();

@@ -7,5 +7,5 @@ window.CHARTS.ipv4_icmp = {
   unit:    'packets/s',
   stacked: false,
   colors:  ['#22c55e', '#ef4444'],
-  nav:     { group: 'Network', section: 'ICMP' },
+  nav:     { group: 'Protocol', section: 'ICMP' },
 };

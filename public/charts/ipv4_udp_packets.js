@@ -7,5 +7,5 @@ window.CHARTS.ipv4_udp_packets = {
   unit:    'packets/s',
   stacked: false,
   colors:  ['#22c55e', '#ef4444'],
-  nav:     { group: 'Network', section: 'IPv4' },
+  nav:     { group: 'Protocol', section: 'UDP' },
 };

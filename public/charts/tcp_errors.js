@@ -7,5 +7,5 @@ window.CHARTS.tcp_errors = {
   unit:    'packets/s',
   stacked: false,
   colors:  ['#ef4444'],
-  nav:     { group: 'Network', section: 'TCP' },
+  nav:     { group: 'Protocol', section: 'TCP' },
 };

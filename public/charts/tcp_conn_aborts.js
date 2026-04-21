@@ -7,5 +7,5 @@ window.CHARTS.tcp_conn_aborts = {
   unit:    'conns/s',
   stacked: false,
   colors:  ['#ef4444', '#22c55e', '#f97316', '#eab308', '#00d4ff', '#a855f7'],
-  nav:     { group: 'Network', section: 'TCP' },
+  nav:     { group: 'Protocol', section: 'TCP' },
 };

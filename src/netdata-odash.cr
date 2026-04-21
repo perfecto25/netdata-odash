@@ -15,8 +15,31 @@ require "./netdata/diskinfo"
 require "./netdata/mountinfo"
 require "./netdata/netinfo"
 require "./charts/cpu"
+require "./charts/cpu_interrupts"
+require "./charts/irq_pressure"
+require "./charts/irq_pressure_stall"
 require "./charts/memory"
 require "./charts/load"
+require "./charts/processes_all"
+require "./charts/processes_forks"
+require "./charts/processes_ctxt"
+require "./charts/processes_fds"
+require "./charts/processes_oom"
+require "./charts/processes_active"
+require "./charts/processes_oom_line"
+require "./charts/processes_running"
+require "./charts/processes_started"
+require "./charts/processes_ctxt_line"
+require "./charts/processes_fds_line"
+require "./charts/processes_fds_util"
+require "./charts/processes_swap"
+require "./charts/ipc_semaphore_arrays"
+require "./charts/ipc_semaphores"
+require "./charts/ipc_shm_bytes"
+require "./charts/ipc_shm_segments"
+require "./netdata/serviceinfo"
+require "./netdata/appswapdata"
+require "./charts/servicetable"
 require "./charts/clock"
 require "./charts/clock_offset"
 require "./charts/clock_sync_state"
@@ -112,6 +135,10 @@ require "./charts/ipv6_packets"
 require "./charts/ipv6_errors"
 require "./charts/ipv6_udppackets"
 require "./charts/ipv6_udperrors"
+require "./charts/ipv6_udplitepackets"
+require "./charts/ipv6_udppackets_line"
+require "./charts/ipv6_udperrors_line"
+require "./charts/ipv6_udplitepackets_line"
 require "./charts/ipv6_bandwidth"
 require "./charts/ipv6_packets_line"
 require "./charts/ipv6_mcast"
@@ -158,6 +185,66 @@ server = HTTP::Server.new do |ctx|
   when "/charts/cpu.js"
     ctx.response.headers["Content-Type"] = "application/javascript"
     ctx.response.print Charts::Cpu::JS
+  when "/charts/cpu_interrupts.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::CpuInterrupts::JS
+  when "/charts/irq_pressure.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::IrqPressure::JS
+  when "/charts/irq_pressure_stall.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::IrqPressureStall::JS
+  when "/charts/processes_all.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::ProcessesAll::JS
+  when "/charts/processes_forks.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::ProcessesForks::JS
+  when "/charts/processes_ctxt.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::ProcessesCtxt::JS
+  when "/charts/processes_fds.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::ProcessesFds::JS
+  when "/charts/processes_oom.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::ProcessesOom::JS
+  when "/charts/processes_active.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::ProcessesActive::JS
+  when "/charts/processes_oom_line.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::ProcessesOomLine::JS
+  when "/charts/processes_running.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::ProcessesRunning::JS
+  when "/charts/processes_started.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::ProcessesStarted::JS
+  when "/charts/processes_ctxt_line.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::ProcessesCtxtLine::JS
+  when "/charts/processes_fds_line.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::ProcessesFdsLine::JS
+  when "/charts/processes_fds_util.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::ProcessesFdsUtil::JS
+  when "/charts/processes_swap.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::ProcessesSwap::JS
+  when "/charts/ipc_semaphore_arrays.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::IpcSemaphoreArrays::JS
+  when "/charts/ipc_semaphores.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::IpcSemaphores::JS
+  when "/charts/ipc_shm_bytes.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::IpcShmBytes::JS
+  when "/charts/ipc_shm_segments.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::IpcShmSegments::JS
   when "/charts/memory.js"
     ctx.response.headers["Content-Type"] = "application/javascript"
     ctx.response.print Charts::Memory::JS
@@ -449,6 +536,18 @@ server = HTTP::Server.new do |ctx|
   when "/charts/ipv6_udperrors.js"
     ctx.response.headers["Content-Type"] = "application/javascript"
     ctx.response.print Charts::Ipv6Udperrors::JS
+  when "/charts/ipv6_udplitepackets.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::Ipv6Udplitepackets::JS
+  when "/charts/ipv6_udppackets_line.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::Ipv6UdppacketsLine::JS
+  when "/charts/ipv6_udperrors_line.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::Ipv6UdperrorsLine::JS
+  when "/charts/ipv6_udplitepackets_line.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::Ipv6UdplitepacketsLine::JS
   when "/charts/ipv6_bandwidth.js"
     ctx.response.headers["Content-Type"] = "application/javascript"
     ctx.response.print Charts::Ipv6Bandwidth::JS
@@ -479,6 +578,13 @@ server = HTTP::Server.new do |ctx|
   when "/charts/nfs_proc4.js"
     ctx.response.headers["Content-Type"] = "application/javascript"
     ctx.response.print Charts::NfsProc4::JS
+  when "/appswapdata"
+    handle_appswapdata(ctx)
+  when "/serviceinfo"
+    handle_serviceinfo(ctx)
+  when "/charts/servicetable.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::Servicetable::JS
   else
     ctx.response.headers["Content-Type"] = "text/html; charset=utf-8"
     ctx.response.print Frontend::INDEX_HTML

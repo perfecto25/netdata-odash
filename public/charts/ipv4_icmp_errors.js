@@ -7,5 +7,5 @@ window.CHARTS.ipv4_icmp_errors = {
   unit:    'packets/s',
   stacked: false,
   colors:  ['#ef4444', '#f97316', '#eab308'],
-  nav:     { group: 'Network', section: 'ICMP' },
+  nav:     { group: 'Protocol', section: 'ICMP' },
 };

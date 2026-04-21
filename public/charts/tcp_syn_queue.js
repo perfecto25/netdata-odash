@@ -7,5 +7,5 @@ window.CHARTS.tcp_syn_queue = {
   unit:    'packets/s',
   stacked: false,
   colors:  ['#ef4444', '#eab308'],
-  nav:     { group: 'Network', section: 'TCP' },
+  nav:     { group: 'Protocol', section: 'TCP' },
 };

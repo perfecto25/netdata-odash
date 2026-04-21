@@ -132,6 +132,24 @@
                 font-weight: 600;
             }
 
+            /* ── Chart search ── */
+            #chart-search {
+                background: var(--bg);
+                color: var(--text);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-size: 13px;
+                width: 160px;
+            }
+            #chart-search:focus {
+                outline: none;
+                border-color: var(--accent);
+            }
+            #chart-search::placeholder {
+                color: var(--muted);
+            }
+
             /* ── Refresh & status ── */
             #refresh-btn {
                 background: transparent;
@@ -173,9 +191,12 @@
 
             .card-header {
                 display: flex;
-                justify-content: space-between;
-                align-items: baseline;
+                align-items: center;
+                gap: 10px;
                 margin-bottom: 14px;
+            }
+            .card-header .card-sub {
+                margin-right: auto;
             }
             .card-title {
                 font-size: 15px;
@@ -452,6 +473,34 @@
                 border-left-color: var(--accent);
                 background: rgba(0, 212, 255, 0.07);
             }
+
+            /* ── Expand button ── */
+            .card-expand-btn {
+                background: transparent;
+                border: 1px solid var(--border);
+                color: var(--muted);
+                border-radius: 4px;
+                padding: 2px 7px;
+                cursor: pointer;
+                font-size: 13px;
+                line-height: 1.4;
+                flex-shrink: 0;
+                margin-left: auto;
+            }
+            .card-expand-btn:hover {
+                color: var(--accent);
+                border-color: var(--accent);
+            }
+
+            /* ── Expanded card (full-screen overlay) ── */
+            .card.expanded {
+                position: fixed;
+                inset: 0;
+                z-index: 200;
+                border-radius: 0;
+                overflow-y: auto;
+                padding: 24px;
+            }
         </style>
     </head>
     <body>
@@ -470,6 +519,7 @@
             <div id="time-ranges"></div>
 
             <button id="refresh-btn">↺ Refresh</button>
+            <input type="text" id="chart-search" placeholder="Search charts…">
             <span id="status">connecting…</span>
         </header>
 
@@ -483,6 +533,9 @@
         </div>
 
         <script src="/charts/cpu.js"></script>
+        <script src="/charts/cpu_interrupts.js"></script>
+        <script src="/charts/irq_pressure.js"></script>
+        <script src="/charts/irq_pressure_stall.js"></script>
         <script src="/charts/load.js"></script>
         <script src="/charts/clock.js"></script>
         <script src="/charts/clock_offset.js"></script>
@@ -581,6 +634,10 @@
         <script src="/charts/ipv6_errors.js"></script>
         <script src="/charts/ipv6_udppackets.js"></script>
         <script src="/charts/ipv6_udperrors.js"></script>
+        <script src="/charts/ipv6_udplitepackets.js"></script>
+        <script src="/charts/ipv6_udppackets_line.js"></script>
+        <script src="/charts/ipv6_udperrors_line.js"></script>
+        <script src="/charts/ipv6_udplitepackets_line.js"></script>
         <script src="/charts/ipv6_bandwidth.js"></script>
         <script src="/charts/ipv6_packets_line.js"></script>
         <script src="/charts/ipv6_mcast.js"></script>
@@ -589,6 +646,24 @@
         <script src="/charts/ipv6_errors_line.js"></script>
         <script src="/charts/ipv6_fragsin.js"></script>
         <script src="/charts/ipv6_fragsout.js"></script>
+        <script src="/charts/processes_all.js"></script>
+        <script src="/charts/processes_forks.js"></script>
+        <script src="/charts/processes_ctxt.js"></script>
+        <script src="/charts/processes_fds.js"></script>
+        <script src="/charts/processes_oom.js"></script>
+        <script src="/charts/processes_active.js"></script>
+        <script src="/charts/processes_oom_line.js"></script>
+        <script src="/charts/processes_running.js"></script>
+        <script src="/charts/processes_started.js"></script>
+        <script src="/charts/processes_ctxt_line.js"></script>
+        <script src="/charts/processes_fds_line.js"></script>
+        <script src="/charts/processes_fds_util.js"></script>
+        <script src="/charts/processes_swap.js"></script>
+        <script src="/charts/ipc_semaphore_arrays.js"></script>
+        <script src="/charts/ipc_semaphores.js"></script>
+        <script src="/charts/ipc_shm_bytes.js"></script>
+        <script src="/charts/ipc_shm_segments.js"></script>
+        <script src="/charts/servicetable.js"></script>
         <script src="/app.js"></script>
     </body>
 </html>

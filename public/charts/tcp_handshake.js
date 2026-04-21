@@ -7,5 +7,5 @@ window.CHARTS.tcp_handshake = {
   unit:    'events/s',
   stacked: false,
   colors:  ['#ef4444', '#f97316'],
-  nav:     { group: 'Network', section: 'TCP' },
+  nav:     { group: 'Protocol', section: 'TCP' },
 };

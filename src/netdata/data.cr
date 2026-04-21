@@ -22,7 +22,13 @@ def handle_data(ctx : HTTP::Server::Context)
   begin
     uri = URI.parse("#{NETDATA_URL}#{base_path}?#{qs}")
     response = HTTP::Client.get(uri)
-    ctx.response.print response.body
+    body = response.body.strip
+    ctx.response.headers["Content-Type"] = "application/json"
+    if body.starts_with?("{") || body.starts_with?("[")
+      ctx.response.print body
+    else
+      ctx.response.print({labels: [] of String, data: [] of String}.to_json)
+    end
   rescue ex
     ctx.response.status = HTTP::Status::BAD_GATEWAY
     ctx.response.print({error: ex.message}.to_json)

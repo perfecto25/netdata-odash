@@ -9,9 +9,11 @@ def handle_nodeinfo(ctx : HTTP::Server::Context)
     parsed = JSON.parse(body)
     result = {
       hostname:     parsed["hostname"]?.try(&.as_s),
+      os_name:      parsed["os_name"]?.try(&.as_s),
       os_version:   parsed["os_version"]?.try(&.as_s),
-      os_id_like:   parsed["os_id_like"]?.try(&.as_s),
       architecture: parsed["architecture"]?.try(&.as_s),
+      cores_total:  parsed["cores_total"]?.try(&.as_s),
+      ram_total:    parsed["ram_total"]?.try(&.as_s),
     }
     ctx.response.headers["Content-Type"] = "application/json"
     ctx.response.print result.to_json

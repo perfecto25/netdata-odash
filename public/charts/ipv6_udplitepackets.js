@@ -7,5 +7,5 @@ window.CHARTS.ipv6_udplitepackets = {
   unit:    'packets/s',
   stacked: false,
   colors:  ['#22c55e', '#ef4444'],
-  nav:     { group: 'Protocol', section: 'UDP' },
+  nav:     { group: 'Network', section: 'IPv6' },
 };

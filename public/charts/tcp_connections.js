@@ -7,5 +7,5 @@ window.CHARTS.tcp_connections = {
   unit:    'connections',
   stacked: false,
   colors:  ['#22c55e'],
-  nav:     { group: 'Network', section: 'TCP' },
+  nav:     { group: 'Protocol', section: 'TCP' },
 };
