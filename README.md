@@ -34,7 +34,12 @@ odash requires Crystal language and PCRE devel package
 
     crystal build src/netdata-odash.cr -o bin/netdata-odash
     
-    
+## Roadmap
+
+- add dynamic assistant section - for last 5 min timeframe - check all chart metrics and show warning signs, ie load avg 1min is high, disk IO is high, show warning in this section that load avg + disk io are high and suggest cause for this
+
+
+
 ## Development
 
 You can contribute to this project by forking this repo and submitting a PR

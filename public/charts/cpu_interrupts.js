@@ -2,10 +2,12 @@ window.CHARTS = window.CHARTS || {};
 window.CHARTS.cpu_interrupts = {
   id:      'cpu_interrupts',
   title:   'CPU Interrupts',
-  sub:     'system.intr',
-  chart:   'system.intr',
-  unit:    'interrupts/s',
-  stacked: false,
-  colors:  ['#22c55e'],
+  sub:     'system.interrupts',
+  chart:   'system.interrupts',
+  unit:    'K/s',
+  divisor: 1000,
+  stacked: true,
+  colors:  [],
+  noStats: true,
   nav:     { group: 'System', section: 'Compute' },
 };

@@ -485,11 +485,43 @@
                 font-size: 13px;
                 line-height: 1.4;
                 flex-shrink: 0;
-                margin-left: auto;
             }
             .card-expand-btn:hover {
                 color: var(--accent);
                 border-color: var(--accent);
+            }
+            .card-help-btn {
+                background: transparent;
+                border: 1px solid var(--border);
+                color: var(--muted);
+                border-radius: 50%;
+                width: 20px;
+                height: 20px;
+                padding: 0;
+                cursor: pointer;
+                font-size: 11px;
+                font-weight: 700;
+                line-height: 18px;
+                text-align: center;
+                flex-shrink: 0;
+            }
+            .card-help-btn:hover {
+                color: var(--accent);
+                border-color: var(--accent);
+            }
+            #chart-help-popup {
+                position: fixed;
+                background: #1a1d27;
+                border: 1px solid #3a3d4a;
+                border-radius: 8px;
+                padding: 14px 16px;
+                max-width: 320px;
+                font-size: 13px;
+                line-height: 1.65;
+                color: #cbd5e1;
+                z-index: 2000;
+                box-shadow: 0 8px 32px rgba(0,0,0,.7);
+                display: none;
             }
 
             /* ── Expanded card (full-screen overlay) ── */
@@ -534,6 +566,12 @@
 
         <script src="/charts/cpu.js"></script>
         <script src="/charts/cpu_interrupts.js"></script>
+        <script src="/charts/cpu_some_pressure.js"></script>
+        <script src="/charts/cpu_some_pressure_stall.js"></script>
+        <script src="/charts/mem_some_pressure.js"></script>
+        <script src="/charts/mem_some_pressure_stall.js"></script>
+        <script src="/charts/mem_full_pressure.js"></script>
+        <script src="/charts/mem_full_pressure_stall.js"></script>
         <script src="/charts/irq_pressure.js"></script>
         <script src="/charts/irq_pressure_stall.js"></script>
         <script src="/charts/load.js"></script>
@@ -542,6 +580,10 @@
         <script src="/charts/clock_sync_state.js"></script>
         <script src="/charts/memory.js"></script>
         <script src="/charts/mem_available.js"></script>
+        <script src="/charts/mem_committed.js"></script>
+        <script src="/charts/mem_swap.js"></script>
+        <script src="/charts/mem_swap_cached.js"></script>
+        <script src="/charts/mem_swapio.js"></script>
         <script src="/charts/mem_pgfaults.js"></script>
         <script src="/charts/mem_reclaiming.js"></script>
         <script src="/charts/mem_writeback.js"></script>
@@ -559,6 +601,10 @@
         <script src="/charts/mem_kernel.js"></script>
         <script src="/charts/mem_slab.js"></script>
         <script src="/charts/mem_hwcorrupt.js"></script>
+        <script src="/charts/io_some_pressure.js"></script>
+        <script src="/charts/io_some_pressure_stall.js"></script>
+        <script src="/charts/io_full_pressure.js"></script>
+        <script src="/charts/io_full_pressure_stall.js"></script>
         <script src="/charts/disktable.js"></script>
         <script src="/charts/disk.js"></script>
         <script src="/charts/disk_ext_io.js"></script>
