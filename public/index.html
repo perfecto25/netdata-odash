@@ -168,8 +168,19 @@
                 color: var(--accent);
             }
 
-            #status {
+            #node-count {
                 margin-left: auto;
+                font-size: 12px;
+                font-weight: 600;
+                color: #000;
+                background: #ffffff;
+                border-radius: 6px;
+                padding: 4px 10px;
+                white-space: nowrap;
+                display: none;
+            }
+
+            #status {
                 font-size: 12px;
                 color: var(--muted);
                 white-space: nowrap;
@@ -520,7 +531,7 @@
                 line-height: 1.65;
                 color: #cbd5e1;
                 z-index: 2000;
-                box-shadow: 0 8px 32px rgba(0,0,0,.7);
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
                 display: none;
             }
 
@@ -551,7 +562,8 @@
             <div id="time-ranges"></div>
 
             <button id="refresh-btn">↺ Refresh</button>
-            <input type="text" id="chart-search" placeholder="Search charts…">
+            <input type="text" id="chart-search" placeholder="Search charts…" />
+            <span id="node-count"></span>
             <span id="status">connecting…</span>
         </header>
 

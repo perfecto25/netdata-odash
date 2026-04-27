@@ -3,6 +3,38 @@ require "http/client"
 require "json"
 require "uri"
 require "log"
+require "option_parser"
+
+# ── Version ────────────────────────────────────────────────────────────────────
+
+SHARD_YML = {{ read_file("#{__DIR__}/../shard.yml") }}
+VERSION    = SHARD_YML.lines.find { |l| l.starts_with?("version:") }.not_nil!.split(": ", 2).last.strip
+
+# ── CLI Options ────────────────────────────────────────────────────────────────
+
+netdata_port_opt : String? = nil
+odash_port_opt   : String? = nil
+
+OptionParser.parse do |p|
+  p.banner = "Usage: netdata-odash [options]"
+  p.on("--netdata-port PORT", "Netdata parent port (env: NETDATA_PORT, default: 19999)") { |v| netdata_port_opt = v }
+  p.on("--odash-port PORT",   "Dashboard listen port (env: ODASH_PORT, default: 8080)")  { |v| odash_port_opt = v }
+  p.on("--help", "Show version and options") do
+    puts "netdata-odash #{VERSION}"
+    puts p
+    exit 0
+  end
+  p.invalid_option { |flag| STDERR.puts "Unknown option: #{flag}"; STDERR.puts "Run with --help for usage."; exit 1 }
+end
+
+# CLI flag > env var > default. Set NETDATA_URL so client.cr picks up the right value.
+if (port = netdata_port_opt || ENV["NETDATA_PORT"]?)
+  base = ENV["NETDATA_URL"]? || "http://localhost:19999"
+  uri  = URI.parse(base)
+  ENV["NETDATA_URL"] = "#{uri.scheme}://#{uri.host}:#{port}"
+end
+
+ENV["ODASH_PORT"] = odash_port_opt if odash_port_opt
 
 require "./netdata/client"
 require "./netdata/cors"
@@ -520,7 +552,7 @@ end
 
 # ── Boot ───────────────────────────────────────────────────────────────────────
 
-puts "Netdata Dash running at http://localhost:#{PORT}"
+puts "Netdata Open Dashboardcd  running at http://localhost:#{PORT}"
 puts "Proxying Netdata at #{NETDATA_URL}"
 
 server.bind_tcp("0.0.0.0", PORT)

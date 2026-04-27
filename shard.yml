@@ -1,5 +1,5 @@
 name: netdata-odash
-version: 0.1.0
+version: 0.1.1
 
 authors:
   - mreider <mike.reider@gmail.com>
@@ -8,6 +8,6 @@ targets:
   netdata-odash:
     main: src/netdata-odash.cr
 
-crystal: '>= 1.19.1'
+crystal: ">= 1.19.1"
 
 license: MIT

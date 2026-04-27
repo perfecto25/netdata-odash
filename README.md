@@ -4,8 +4,15 @@ Netdata Open Dashboard is an open source dashboard for Netdata collector
 
 It imposes no node limits and works by querying netdata API endpoints to gather host metrics
 
+The dashboard shows all relevant system metrics and has help dialogue on each chart to explain what the metrics mean and how they correlate to overall system health
+
+
+![image](screen.png)
+
 
 This dashboard has been tested on Fedora 43 linux and Rocky 9 linux only
+
+
 
 ## Installation
 
@@ -19,11 +26,27 @@ odash will connect to this host via API and query metrics
 
 start odash using the systemd script provided
 
+Odash will query Netdata API backend and return a dashboard with metrics.
+
+By default, it will run on localhost port 8080, and query localhost:19999
+
+
+
 to change default ports, you can use .env file or export these ENV variables
 
     NETDATA_PORT=19999
 
     ODASH_PORT=8080
+
+or pass the ports directly when running the binary
+
+    ./netdata-odash --netdata-port 19999 --odash-port 8080
+
+if ports are passed directly via cli arguments, they will override the environment variables
+
+to see the netdata-odash version, run 
+
+    ./netdata-odash --help
 
 
 ## Build from source

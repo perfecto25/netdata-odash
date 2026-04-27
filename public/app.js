@@ -433,7 +433,7 @@
 
   async function loadNodes() {
     try {
-      const nodes = await apiFetch("/nodes");
+      const nodes = (await apiFetch("/nodes")).sort((a, b) => a.hostname.localeCompare(b.hostname));
       const sel = $("node-select");
       sel.innerHTML = '<option value="">— Select a node —</option>';
       nodeMap = {};
@@ -444,6 +444,9 @@
         o.textContent = n.hostname;
         sel.appendChild(o);
       });
+      const nc = $("node-count");
+      nc.textContent = nodes.length + " nodes up";
+      nc.style.display = "inline";
       setStatus(nodes.length + " node(s) found", "ok");
       if (nodes.length > 0) {
         sel.value = nodes[0].hostname;
@@ -1034,13 +1037,16 @@
       const info = await apiFetch('/nodeinfo', { node: node });
       if (info.cores_total) nodeCores[node] = parseInt(info.cores_total) || 1;
       const ramGib = info.ram_total ? (parseInt(info.ram_total) / (1024 * 1024 * 1024)).toFixed(0) + ' GiB' : '—';
+      const swapMib = info.swap_total_mib || 0;
+      const swapStr = swapMib === 0 ? '—' : swapMib < 1024 ? swapMib + ' MiB' : (swapMib / 1024).toFixed(0) + ' GiB';
       const osLabel = [info.os_name, info.os_version].filter(Boolean).join(' ') || '—';
       card.querySelector('.sysinfo-lines').innerHTML =
         '<div class="si-name">' + (info.hostname || node) + '</div>' +
         '<div class="si-row"><span class="si-label">OS</span>'   + osLabel              + '</div>' +
         '<div class="si-row"><span class="si-label">Arch</span>' + (info.architecture || '—') + '</div>' +
         '<div class="si-row"><span class="si-label">CPUs</span>' + (info.cores_total  || '—') + '</div>' +
-        '<div class="si-row"><span class="si-label">RAM</span>'  + ramGib               + '</div>';
+        '<div class="si-row"><span class="si-label">RAM</span>'  + ramGib               + '</div>' +
+        '<div class="si-row"><span class="si-label">Swap</span>' + swapStr              + '</div>';
     } catch(e) {}
   }
 
