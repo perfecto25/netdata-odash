@@ -1,0 +1,94 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Pinned for reproducible builds; shard.yml requires >= 1.19.1.
+  CRYSTAL_VERSION: "1.21.0"
+
+jobs:
+  build:
+    name: linux-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            # Native ARM runner: free for public repos, Team/Enterprise for private.
+            # If it is unavailable, use ubuntu-24.04 with docker/setup-qemu-action
+            # and add `--platform linux/arm64` to the docker run below — same
+            # result, but emulated Crystal builds take a good deal longer.
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Building against Alpine/musl produces a fully static binary with no libc
+      # dependency, so one build per arch runs on Debian, Fedora and Arch alike —
+      # a glibc build would only run on distros with a glibc at least as new as
+      # the builder's. All HTML/JS is embedded at compile time, so this single
+      # file is the whole app.
+      - name: Build static binary
+        run: |
+          docker run --rm -v "$PWD":/src -w /src \
+            "crystallang/crystal:${CRYSTAL_VERSION}-alpine" \
+            sh -c 'set -e
+              shards install
+              shards build --release --no-debug --static
+              strip bin/netdata-odash'
+
+      - name: Verify the binary is static and runs
+        run: |
+          file bin/netdata-odash
+          file bin/netdata-odash | grep -q "statically linked" \
+            || { echo "::error::binary is not statically linked"; exit 1; }
+          ./bin/netdata-odash --help
+
+      - name: Stage artifact and checksum
+        run: |
+          mkdir -p dist
+          cp bin/netdata-odash "dist/netdata-odash-linux-${{ matrix.arch }}"
+          cd dist
+          sha256sum "netdata-odash-linux-${{ matrix.arch }}" \
+            > "netdata-odash-linux-${{ matrix.arch }}.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: netdata-odash-linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    # Tag pushes only: v0.1.3, v1.0.0, ...
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la dist
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes

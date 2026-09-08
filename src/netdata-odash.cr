@@ -38,7 +38,9 @@ ENV["ODASH_PORT"] = odash_port_opt if odash_port_opt
 
 require "./netdata/client"
 require "./netdata/cors"
+require "./netdata/node_store"
 require "./netdata/nodes"
+require "./netdata/admin"
 require "./netdata/data"
 require "./netdata/proxy"
 require "./netdata/nodeinfo"
@@ -46,6 +48,8 @@ require "./netdata/diskdata"
 require "./netdata/diskinfo"
 require "./netdata/mountinfo"
 require "./netdata/netinfo"
+require "./netdata/capabilities"
+require "./netdata/context_data"
 require "./charts/clock"
 require "./charts/cpu"
 require "./charts/disk"
@@ -60,6 +64,12 @@ require "./charts/mountpoints"
 require "./charts/net"
 require "./charts/nfs"
 require "./charts/processes"
+require "./charts/gpu"
+require "./charts/sensor_temperature"
+require "./charts/sensor_temperature_histogram"
+require "./charts/sensor_voltage"
+require "./charts/sensor_fan"
+require "./charts/sensor_power"
 require "./charts/servicetable"
 require "./charts/sockstat"
 require "./charts/tcp"
@@ -82,6 +92,14 @@ server = HTTP::Server.new do |ctx|
   case path
   when "/nodes"
     handle_nodes(ctx)
+  when "/admin/nodes"
+    handle_admin_nodes(ctx)
+  when "/admin/nodes/approve"
+    handle_admin_approve(ctx)
+  when "/admin/nodes/reject"
+    handle_admin_reject(ctx)
+  when "/admin/nodes/delete"
+    handle_admin_delete(ctx)
   when "/nodeinfo"
     handle_nodeinfo(ctx)
   when "/diskinfo"
@@ -92,6 +110,12 @@ server = HTTP::Server.new do |ctx|
     handle_mountinfo(ctx)
   when "/netinfo"
     handle_netinfo(ctx)
+  when "/capabilities"
+    handle_capabilities(ctx)
+  when "/sensordata"
+    handle_sensordata(ctx)
+  when "/gpudata"
+    handle_gpudata(ctx)
   when "/data"
     handle_data(ctx)
   when "/proxy"
@@ -541,9 +565,54 @@ server = HTTP::Server.new do |ctx|
     handle_appswapdata(ctx)
   when "/serviceinfo"
     handle_serviceinfo(ctx)
+  when "/charts/gpu_utilization.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::GpuUtilization::JS
+  when "/charts/gpu_mem_utilization.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::GpuMemUtilization::JS
+  when "/charts/gpu_clk_frequency.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::GpuClkFrequency::JS
+  when "/charts/gpu_mem_clk_frequency.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::GpuMemClkFrequency::JS
+  when "/charts/gpu_vram_usage_perc.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::GpuVramUsagePerc::JS
+  when "/charts/gpu_vram_usage.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::GpuVramUsage::JS
+  when "/charts/gpu_vis_vram_usage_perc.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::GpuVisVramUsagePerc::JS
+  when "/charts/gpu_vis_vram_usage.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::GpuVisVramUsage::JS
+  when "/charts/gpu_gtt_usage_perc.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::GpuGttUsagePerc::JS
+  when "/charts/gpu_gtt_usage.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::GpuGttUsage::JS
   when "/charts/servicetable.js"
     ctx.response.headers["Content-Type"] = "application/javascript"
     ctx.response.print Charts::Servicetable::JS
+  when "/charts/sensor_temperature.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::SensorTemperature::JS
+  when "/charts/sensor_temperature_histogram.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::SensorTemperatureHistogram::JS
+  when "/charts/sensor_voltage.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::SensorVoltage::JS
+  when "/charts/sensor_fan.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::SensorFan::JS
+  when "/charts/sensor_power.js"
+    ctx.response.headers["Content-Type"] = "application/javascript"
+    ctx.response.print Charts::SensorPower::JS
   else
     ctx.response.headers["Content-Type"] = "text/html; charset=utf-8"
     ctx.response.print Frontend::INDEX_HTML
@@ -552,7 +621,7 @@ end
 
 # ── Boot ───────────────────────────────────────────────────────────────────────
 
-puts "Netdata Open Dashboardcd  running at http://localhost:#{PORT}"
+puts "Netdata Open Dashboard running at http://localhost:#{PORT}"
 puts "Proxying Netdata at #{NETDATA_URL}"
 
 server.bind_tcp("0.0.0.0", PORT)

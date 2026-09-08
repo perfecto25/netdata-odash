@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/netdata-odash
+ExecStart=/usr/local/bin/netdata-odash --netdata-port 19999 --odash-port 8080
 Restart=always
 RestartSec=10
 StandardOutput=journal

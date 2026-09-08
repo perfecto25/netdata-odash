@@ -204,6 +204,25 @@
 
     // Services
     servicetable:           'Per-service resource breakdown: CPU, memory, disk I/O. Shows which services are the top consumers at a glance. Use this to quickly correlate system-wide CPU or memory spikes to the responsible application without needing to run top or ps.',
+
+    // GPU (amdgpu, only shown when the node has one)
+    gpu_utilization:        'Percentage of time the GPU\'s graphics pipeline was busy, one line per card. Sustained high utilization on a compute host is healthy throughput; on a desktop it usually means a runaway shader or a stuck compositor. Pair with GPU Clock Frequency to tell real work apart from a card sitting at idle clocks.',
+    gpu_mem_utilization:    'Percentage of time the GPU memory controller was busy moving data, one line per card. High memory utilization with low GPU utilization means the workload is bandwidth-bound rather than compute-bound — the shaders are waiting on VRAM.',
+    gpu_clk_frequency:      'Core clock speed of the GPU in MHz. Cards idle at a low clock and boost under load, so this tracks GPU Utilization closely. A card stuck at a low clock while utilization is pegged indicates thermal or power throttling — check Sensor Temperature and Sensor Power.',
+    gpu_mem_clk_frequency:  'Memory clock speed of the GPU in MHz. Usually pinned near its maximum whenever the card is out of its idle state. Unexpected drops under load point to throttling.',
+    gpu_vram_usage_perc:    'Share of the card\'s dedicated VRAM in use. Approaching 100% forces the driver to spill allocations into system memory over PCIe, which is far slower — watch GTT Usage rise at the same time as the symptom.',
+    gpu_vram_usage:         'Dedicated VRAM in use versus free, stacked (used in red at the bottom). This is the absolute counterpart to the percentage chart, useful for sizing workloads against the card\'s physical memory.',
+    gpu_vis_vram_usage_perc: 'Share of the CPU-visible VRAM aperture in use. On older cards this window is small (often 256 MiB) and can fill long before VRAM itself, stalling transfers even when the card looks half empty.',
+    gpu_vis_vram_usage:     'CPU-visible VRAM aperture in use versus free, stacked (used in red at the bottom). Exhausting this window while plenty of VRAM remains is a classic cause of stuttering on pre-Resizable-BAR hardware.',
+    gpu_gtt_usage_perc:     'Share of GTT (Graphics Translation Table) in use — system RAM mapped for the GPU over PCIe. Rising GTT usage alongside full VRAM means the driver is spilling to host memory, which costs bandwidth and latency.',
+    gpu_gtt_usage:          'GTT in use versus free, stacked (used in red at the bottom). GTT is system RAM lent to the GPU, so growth here also consumes host memory — cross-check Memory Usage.',
+
+    // Sensors (LM sensors / hwmon, only shown when the node reports this data)
+    sensor_temperature:     'Temperature probes from lm-sensors (CPU cores, chipset, NVMe, GPU, etc), drawn as one line per chip showing that chip\'s hottest probe. Rising trends under steady load point to failing cooling or dust buildup. A flat line at 127 °C is the sentinel value some chips report for a probe that is not actually wired up. Only shown when the node has lm-sensors data.',
+    sensor_temperature_histogram: 'How the node\'s temperature probes are spread across temperature bands over time. The Y axis is the band in °C and the cell colour is how many probes were sitting in it — dark blue for few, yellow for many. Colour creeping upward means heat is spreading across the machine rather than sitting on one component. Only shown when the node has lm-sensors data.',
+    sensor_voltage:         'Voltage rail readings from hardware sensors (e.g. GPU vddgfx), one line per chip. Values drifting well outside the rail\'s nominal spec can indicate a failing PSU or VRM. Only shown when the node has lm-sensors voltage data.',
+    sensor_fan:             'Fan speed in RPM from hardware sensors, one line per chip. A fan dropping toward zero while temperatures climb usually means a failed or unplugged fan; fans pinned at maximum indicate the system is fighting a thermal problem. Only shown when the node has lm-sensors fan data.',
+    sensor_power:           'Power draw in Watts from hardware sensors, such as GPU package power, one line per chip. Useful for correlating load spikes with thermal and power-budget behavior. Only shown when the node has lm-sensors power data.',
   };
 
   let activeHelpBtn = null;
@@ -254,7 +273,6 @@
   let charts = {};
   let pollTimer = null;
   let fetchGen = 0;
-  let activeNav = null; // { group, section } or null = show all
   let searchFilter = "";
   let gaugeMaxes = {};
   let diskGaugeMaxes = {};
@@ -262,6 +280,8 @@
   let gaugeTableMaxes = {};
   let nodeCores = {};
   let rawRefs = {};
+  let heatRefs = {};
+  let nodeCapabilities = {};
   let scrollHighlightHandler = null;
 
   // ── Scroll highlight ─────────────────────────────────────────────────────────
@@ -307,36 +327,63 @@
 
   // ── Sidebar ───────────────────────────────────────────────────────────────────
 
+  // Charts that declare `requires` (LM sensors, GPU) only show up once the
+  // current node has confirmed it reports that capability.
+  function chartAvailable(def) {
+    if (!def.requires) return true;
+    const caps = nodeCapabilities[currentNode];
+    return !!(caps && caps.has(def.requires));
+  }
+
+  // Charts bucketed by nav group → section, in first-appearance order. The
+  // sidebar and the main pane both lay out from this, so their order — and the
+  // section a nav item scrolls to — can never drift apart.
+  function chartGroups() {
+    const groups = [];
+    const byGroup = {};
+    Object.values(window.CHARTS || {}).forEach((d) => {
+      if (!d.nav) return;
+      let g = byGroup[d.nav.group];
+      if (!g) {
+        g = byGroup[d.nav.group] = { group: d.nav.group, sections: [], bySection: {} };
+        groups.push(g);
+      }
+      let s = g.bySection[d.nav.section];
+      if (!s) {
+        s = g.bySection[d.nav.section] = { section: d.nav.section, defs: [] };
+        g.sections.push(s);
+      }
+      s.defs.push(d);
+    });
+    return groups;
+  }
+
+  function orderedCharts() {
+    const out = [];
+    chartGroups().forEach((g) => g.sections.forEach((s) => s.defs.forEach((d) => out.push(d))));
+    // Charts without a nav entry still render, after the grouped ones
+    Object.values(window.CHARTS || {}).forEach((d) => { if (!d.nav) out.push(d); });
+    return out;
+  }
+
+  function sectionId(group, section) {
+    return ("sec-" + group + "-" + section).replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  }
+
   function getVisibleCharts() {
-    const all = Object.values(window.CHARTS || {});
+    const all = orderedCharts().filter(chartAvailable);
     if (searchFilter) {
       const q = searchFilter.toLowerCase();
       return all.filter((d) => d.title && d.title.toLowerCase().includes(q));
     }
-    if (!activeNav) return all;
-    return all.filter(
-      (d) =>
-        d.nav &&
-        d.nav.group === activeNav.group &&
-        d.nav.section === activeNav.section,
-    );
+    return all;
   }
 
   function buildSidebar() {
     const sidebar = $("sidebar");
     sidebar.innerHTML = "";
-    const all = Object.values(window.CHARTS || {});
-    // Collect groups → sections in order
-    const groups = {};
-    all.forEach((d) => {
-      if (!d.nav) return;
-      const g = d.nav.group;
-      const s = d.nav.section;
-      if (!groups[g]) groups[g] = [];
-      if (!groups[g].includes(s)) groups[g].push(s);
-    });
 
-    Object.entries(groups).forEach(([group, sections]) => {
+    chartGroups().forEach(({ group, sections }) => {
       const groupEl = document.createElement("div");
       groupEl.className = "nav-group";
 
@@ -351,13 +398,13 @@
       const items = document.createElement("div");
       items.className = "nav-items";
 
-      sections.forEach((section) => {
+      sections.forEach(({ section }) => {
         const item = document.createElement("div");
         item.className = "nav-item";
         item.textContent = section;
         item.dataset.group = group;
         item.dataset.section = section;
-        item.addEventListener("click", () => setActiveNav(group, section, item));
+        item.addEventListener("click", () => focusNavSection(group, section));
         items.appendChild(item);
       });
 
@@ -367,24 +414,21 @@
     });
   }
 
-  function setActiveNav(group, section, clickedEl) {
-    // Toggle off if clicking the already-active item
-    const same =
-      activeNav &&
-      activeNav.group === group &&
-      activeNav.section === section;
-    activeNav = same ? null : { group, section };
+  // Nav clicks scroll the section into view; every other chart stays on screen.
+  function focusNavSection(group, section) {
+    const target = document.getElementById(sectionId(group, section));
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
-    document
-      .querySelectorAll(".nav-item")
-      .forEach((el) => el.classList.remove("active"));
-    if (!same && clickedEl) clickedEl.classList.add("active");
-
-    if (currentNode) {
-      fetchGen++;
-      resetCharts();
-      startPolling();
-    }
+  function buildSectionHeader(group, section) {
+    const el = document.createElement("div");
+    el.className = "section-header";
+    el.id = sectionId(group, section);
+    el.innerHTML =
+      '<span class="sh-group">' + escapeHtml(group) + "</span>" +
+      '<span class="sh-sep">›</span>' +
+      '<span class="sh-section">' + escapeHtml(section) + "</span>";
+    return el;
   }
 
   // ── Time range UI ─────────────────────────────────────────────────────────────
@@ -458,15 +502,48 @@
     }
   }
 
+  // ── Node capabilities ─────────────────────────────────────────────────────────
+
+  async function loadCapabilities(node) {
+    try {
+      const info = await apiFetch("/capabilities", { node });
+      const caps = info.capabilities || {};
+      nodeCapabilities[node] = new Set(Object.keys(caps).filter((k) => caps[k]));
+    } catch (e) {
+      nodeCapabilities[node] = new Set();
+    }
+  }
+
+  // Hides sidebar nav items/groups whose charts are all unavailable for the
+  // current node (used for `requires`-gated charts like LM sensors and GPU).
+  function updateSidebarAvailability() {
+    const all = Object.values(window.CHARTS || {});
+    document.querySelectorAll(".nav-item").forEach((item) => {
+      const g = item.dataset.group, s = item.dataset.section;
+      const anyAvailable = all.some(
+        (d) => d.nav && d.nav.group === g && d.nav.section === s && chartAvailable(d),
+      );
+      item.style.display = anyAvailable ? "" : "none";
+    });
+    document.querySelectorAll(".nav-group").forEach((group) => {
+      const anyVisible = Array.from(group.querySelectorAll(".nav-item")).some(
+        (item) => item.style.display !== "none",
+      );
+      group.style.display = anyVisible ? "" : "none";
+    });
+  }
+
   // ── Chart lifecycle ───────────────────────────────────────────────────────────
 
-  function selectNode(nodeId) {
+  async function selectNode(nodeId) {
     currentNode = nodeId;
     gaugeMaxes = {};
     diskGaugeMaxes = {};
     netGaugeMaxes = {};
     gaugeTableMaxes = {};
     fetchGen++;
+    await loadCapabilities(nodeId);
+    updateSidebarAvailability();
     resetCharts();
     startPolling();
   }
@@ -477,21 +554,35 @@
     Object.values(charts).forEach((c) => c.destroy());
     charts = {};
     rawRefs = {};
+    heatRefs = {};
     buildGauges();
     if (currentNode) loadNodeInfo(currentNode);
     const main = $("main");
-    main.classList.toggle("zoomed", activeNav !== null);
     main.innerHTML = "";
     let rowWrapper = null;
     let rowCount = 0;
+    let curGroup = null;
+    let curSection = null;
     getVisibleCharts().forEach((def) => {
+      // Charts arrive grouped by nav section, so a change of section starts a
+      // fresh header (and a fresh paired row).
+      if (def.nav && (def.nav.group !== curGroup || def.nav.section !== curSection)) {
+        curGroup = def.nav.group;
+        curSection = def.nav.section;
+        rowWrapper = null;
+        rowCount = 0;
+        main.appendChild(buildSectionHeader(curGroup, curSection));
+      }
+
       const card = document.createElement("div");
       card.className = "card";
       card.id = "card-" + def.id;
       if (def.row) {
         if (!rowWrapper || rowCount >= 2) {
           rowWrapper = document.createElement("div");
-          rowWrapper.style.cssText = 'grid-column:1/-1;display:flex;gap:16px;align-items:stretch;';
+          // min-width:0 matters — without it an oversized chart canvas inflates
+          // the row past 100% and pushes its neighbour off screen.
+          rowWrapper.style.cssText = 'flex:0 0 100%;min-width:0;display:flex;gap:20px;align-items:stretch;';
           main.appendChild(rowWrapper);
           rowCount = 0;
         }
@@ -501,7 +592,7 @@
       } else {
         rowWrapper = null;
         rowCount = 0;
-        if (def.display === 'mountpoints' || def.display === 'nettable' || def.display === 'servicetable') card.style.gridColumn = '1 / -1';
+        if (def.display === 'mountpoints' || def.display === 'nettable' || def.display === 'servicetable' || def.fullWidth) card.style.flex = '1 1 100%';
         main.appendChild(card);
       }
       card.innerHTML =
@@ -526,28 +617,65 @@
 
       card.querySelector('.card-expand-btn').addEventListener('click', function() {
         const expanding = !card.classList.contains('expanded');
-        document.querySelectorAll('.card.expanded').forEach(function(c) {
-          c.classList.remove('expanded');
-          c.querySelector('.card-expand-btn').textContent = '⛶';
-        });
+        collapseExpandedCard();
         if (expanding) {
           card.classList.add('expanded');
           this.textContent = '✕';
-        }
-        const ch = charts[def.id];
-        if (ch) {
-          setTimeout(function() {
-            const wrap = document.getElementById('wrap-' + def.id);
-            if (!wrap) return;
-            const w = wrap.clientWidth || 500;
-            const h = expanding ? Math.max(400, window.innerHeight - 180) : 220;
-            ch.setSize({ width: w, height: h });
-          }, 0);
+          fitChart(def.id, EXPANDED_CHART_HEIGHT());
         }
       });
     });
     setupScrollHighlight();
   }
+
+  // uPlot sizes its canvas in pixels, so a chart has to be re-fitted whenever
+  // its card changes width — otherwise the stale canvas keeps the old width and
+  // (before min-width:0 on the row wrapper) stretched the whole row.
+  const CHART_HEIGHT = 220;
+  const EXPANDED_CHART_HEIGHT = () => Math.max(400, window.innerHeight - 180);
+
+  function fitChart(id, height) {
+    const ch = charts[id];
+    if (!ch) return;
+    // Measure after the browser has applied the pending layout change.
+    requestAnimationFrame(function() {
+      const wrap = document.getElementById('wrap-' + id);
+      if (!wrap) return;
+      ch.setSize({ width: wrap.clientWidth || 500, height: height });
+    });
+  }
+
+  function fitAllCharts() {
+    Object.keys(charts).forEach(function(id) {
+      const card = document.getElementById('card-' + id);
+      const expanded = card && card.classList.contains('expanded');
+      fitChart(id, expanded ? EXPANDED_CHART_HEIGHT() : CHART_HEIGHT);
+    });
+  }
+
+  function collapseExpandedCard() {
+    const card = document.querySelector('.card.expanded');
+    if (!card) return;
+    card.classList.remove('expanded');
+    const btn = card.querySelector('.card-expand-btn');
+    if (btn) btn.textContent = '⛶';
+    fitChart(card.id.replace(/^card-/, ''), CHART_HEIGHT);
+  }
+
+  let resizeTimer = null;
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(fitAllCharts, 150);
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    if ($("admin-modal-overlay").classList.contains('open')) {
+      closeAdminModal();
+      return;
+    }
+    collapseExpandedCard();
+  });
 
   function startPolling() {
     refreshCharts();
@@ -794,6 +922,20 @@
     };
   }
 
+  function fmtTime(u, vals) {
+    const rangeS = (u.scales.x.max || 0) - (u.scales.x.min || 0);
+    return vals.map((v) => {
+      if (v == null) return "";
+      const d = new Date(v * 1000);
+      if (rangeS > 86400) return d.getMonth() + 1 + "/" + d.getDate();
+      return (
+        d.getHours().toString().padStart(2, "0") +
+        ":" +
+        d.getMinutes().toString().padStart(2, "0")
+      );
+    });
+  }
+
   function makeSeriesDef(label, color, stacked) {
     return {
       label,
@@ -824,23 +966,9 @@
       dims.map((d, i) => makeSeriesDef(d, resolvedColors[i], def.stacked)),
     );
 
-    function fmtTime(u, vals) {
-      const rangeS = (u.scales.x.max || 0) - (u.scales.x.min || 0);
-      return vals.map((v) => {
-        if (v == null) return "";
-        const d = new Date(v * 1000);
-        if (rangeS > 86400) return d.getMonth() + 1 + "/" + d.getDate();
-        return (
-          d.getHours().toString().padStart(2, "0") +
-          ":" +
-          d.getMinutes().toString().padStart(2, "0")
-        );
-      });
-    }
-
     const opts = {
       width: W,
-      height: 220,
+      height: CHART_HEIGHT,
       series,
       axes: [
         {
@@ -875,6 +1003,213 @@
     };
 
     return new uPlot(opts, data, container);
+  }
+
+  // ── Heatmap ───────────────────────────────────────────────────────────────────
+  //
+  // For bucketed histograms the Y axis is the bucket (e.g. a temperature band)
+  // and the cell colour is how many things fell in it — the same way Netdata
+  // draws these. A stacked area would instead put the *count* on Y, which is
+  // why this needs its own renderer.
+
+  // Viridis-style ramp: low counts dark blue, high counts yellow.
+  const HEAT_STOPS = [
+    [ 68,   1,  84],
+    [ 59,  82, 139],
+    [ 33, 145, 140],
+    [ 94, 201,  98],
+    [253, 231,  37],
+  ];
+
+  function heatColor(t) {
+    if (!(t > 0)) return null; // empty bucket — leave the card background showing
+    const x = Math.min(1, t) * (HEAT_STOPS.length - 1);
+    const i = Math.min(HEAT_STOPS.length - 2, Math.floor(x));
+    const f = x - i;
+    const a = HEAT_STOPS[i], b = HEAT_STOPS[i + 1];
+    return 'rgb(' + Math.round(a[0] + (b[0] - a[0]) * f) + ',' +
+                    Math.round(a[1] + (b[1] - a[1]) * f) + ',' +
+                    Math.round(a[2] + (b[2] - a[2]) * f) + ')';
+  }
+
+  // Bucket i covers everything above the previous bound up to labels[i].
+  function bucketRangeLabel(labels, i) {
+    if (labels[i] === '+Inf') return '> ' + labels[i - 1] + ' °C';
+    if (i === 0) return '≤ ' + labels[0] + ' °C';
+    return labels[i - 1] + '–' + labels[i] + ' °C';
+  }
+
+  function heatmapPlugin(ref) {
+    let tooltip = null;
+
+    function cellWidth(u) {
+      const xs = u.data[0];
+      if (xs.length < 2) return u.bbox.width;
+      const span = Math.abs(u.valToPos(xs[xs.length - 1], 'x', true) - u.valToPos(xs[0], 'x', true));
+      return Math.max(1, span / (xs.length - 1));
+    }
+
+    return {
+      hooks: {
+        init: function(u) {
+          tooltip = document.createElement('div');
+          tooltip.style.cssText = 'position:fixed;background:#1a1d27;border:1px solid #2a2d3a;border-radius:6px;padding:8px 12px;font-size:12px;pointer-events:none;display:none;z-index:1000;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.5)';
+          document.body.appendChild(tooltip);
+
+          u.over.addEventListener('mousemove', function(e) {
+            const labels = ref.labels;
+            if (!labels.length) return;
+            const rect = u.over.getBoundingClientRect();
+            const xVal = u.posToVal(e.clientX - rect.left, 'x');
+            const times = u.data[0];
+
+            let idx = 0, minDist = Infinity;
+            for (let i = 0; i < times.length; i++) {
+              const dist = Math.abs(times[i] - xVal);
+              if (dist < minDist) { minDist = dist; idx = i; }
+            }
+
+            const bucket = Math.floor(u.posToVal(e.clientY - rect.top, 'y'));
+            if (bucket < 0 || bucket >= labels.length) { tooltip.style.display = 'none'; return; }
+
+            const d = new Date(times[idx] * 1000);
+            const hh = d.getHours().toString().padStart(2, '0');
+            const mm = d.getMinutes().toString().padStart(2, '0');
+            const ss = d.getSeconds().toString().padStart(2, '0');
+            const v = ref.series[bucket] && ref.series[bucket][idx];
+            const col = heatColor(ref.max > 0 && v != null ? v / ref.max : 0) || '#2a2d3a';
+
+            tooltip.innerHTML =
+              '<div style="color:#6b7280;margin-bottom:5px;font-size:11px">' + hh + ':' + mm + ':' + ss + '</div>' +
+              '<div style="display:flex;align-items:center;gap:6px">' +
+              '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;flex-shrink:0;background:' + col + '"></span>' +
+              '<span style="color:#9ca3af">' + bucketRangeLabel(labels, bucket) + '</span>' +
+              '<span style="font-weight:600;padding-left:10px;color:#e2e8f0">' + (v == null ? '—' : v.toFixed(1)) + '</span>' +
+              '<span style="color:#6b7280;font-size:11px;margin-left:2px">sensors</span>' +
+              '</div>';
+            tooltip.style.display = 'block';
+
+            let tx = e.clientX + 14;
+            if (tx + tooltip.offsetWidth > window.innerWidth - 8) tx = e.clientX - tooltip.offsetWidth - 14;
+            let ty = e.clientY - 10;
+            if (ty + tooltip.offsetHeight > window.innerHeight - 8) ty = e.clientY - tooltip.offsetHeight - 4;
+            tooltip.style.left = tx + 'px';
+            tooltip.style.top = ty + 'px';
+          });
+
+          u.over.addEventListener('mouseleave', function() { tooltip.style.display = 'none'; });
+        },
+
+        draw: function(u) {
+          const series = ref.series;
+          if (!series.length || !(ref.max > 0)) return;
+          const ctx = u.ctx;
+          const w = cellWidth(u);
+          const times = u.data[0];
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(u.bbox.left, u.bbox.top, u.bbox.width, u.bbox.height);
+          ctx.clip();
+
+          for (let t = 0; t < times.length; t++) {
+            const cx = u.valToPos(times[t], 'x', true);
+            for (let i = 0; i < series.length; i++) {
+              const v = series[i][t];
+              const col = heatColor(v == null ? 0 : v / ref.max);
+              if (!col) continue;
+              const yTop = u.valToPos(i + 1, 'y', true);
+              const yBot = u.valToPos(i, 'y', true);
+              ctx.fillStyle = col;
+              ctx.fillRect(Math.round(cx - w / 2), Math.round(yTop), Math.ceil(w), Math.ceil(yBot - yTop));
+            }
+          }
+          ctx.restore();
+        },
+
+        destroy: function() {
+          if (tooltip && tooltip.parentNode) tooltip.parentNode.removeChild(tooltip);
+          tooltip = null;
+        },
+      },
+    };
+  }
+
+  function buildHeatmap(container, def, data, ref) {
+    const opts = {
+      width: container.clientWidth || 500,
+      height: CHART_HEIGHT,
+      series: [{}, { label: 'buckets', paths: () => null, points: { show: false } }],
+      axes: [
+        {
+          stroke: "#6b7280",
+          ticks: { stroke: "#2a2d3a" },
+          grid: { stroke: "#2a2d3a" },
+          values: fmtTime,
+        },
+        {
+          stroke: "#6b7280",
+          ticks: { stroke: "#2a2d3a" },
+          grid: { stroke: "#2a2d3a" },
+          size: 95,
+          // One tick per bucket boundary, labelled with that bucket's upper bound.
+          splits: () => ref.labels.map((_, i) => i + 1),
+          values: (u, splits) => splits.map((s) => {
+            const l = ref.labels[s - 1];
+            return l === '+Inf' ? '+Inf' : l + ' ' + (def.unit || '');
+          }),
+        },
+      ],
+      scales: { x: { time: true }, y: { range: [0, ref.labels.length] } },
+      plugins: [heatmapPlugin(ref)],
+      cursor: { stroke: "#ffffff33" },
+      legend: { show: false },
+      padding: [10, 10, 0, 0],
+    };
+
+    const u = new uPlot(opts, data, container);
+
+    const legend = document.createElement('div');
+    legend.className = 'heat-legend';
+    legend.id = 'heatlegend-' + def.id;
+    container.appendChild(legend);
+
+    return u;
+  }
+
+  function updateHeatLegend(def, ref) {
+    const el = document.getElementById('heatlegend-' + def.id);
+    if (!el) return;
+    const stops = HEAT_STOPS
+      .map((c, i) => 'rgb(' + c.join(',') + ') ' + Math.round((i / (HEAT_STOPS.length - 1)) * 100) + '%')
+      .join(',');
+    el.innerHTML =
+      '<span class="heat-legend-label">0</span>' +
+      '<span class="heat-legend-bar" style="background:linear-gradient(to right,' + stops + ')"></span>' +
+      '<span class="heat-legend-label">' + (Math.round(ref.max * 10) / 10) + ' sensors</span>';
+  }
+
+  function renderHeatmap(def, parsed) {
+    const wrap = document.getElementById("wrap-" + def.id);
+    if (!wrap) return;
+
+    let max = 0;
+    parsed.series.forEach((s) => s.forEach((v) => { if (v != null && v > max) max = v; }));
+
+    // Mutable ref so the draw hook always paints the latest poll's values.
+    let ref = heatRefs[def.id];
+    if (!ref) ref = heatRefs[def.id] = { series: parsed.series, labels: parsed.labels, max: max };
+    else { ref.series = parsed.series; ref.labels = parsed.labels; ref.max = max; }
+
+    const udata = [parsed.times, new Array(parsed.times.length).fill(null)];
+
+    if (charts[def.id]) {
+      charts[def.id].setData(udata);
+    } else {
+      wrap.innerHTML = "";
+      charts[def.id] = buildHeatmap(wrap, def, udata, ref);
+    }
+    updateHeatLegend(def, ref);
   }
 
   // ── Donut chart ───────────────────────────────────────────────────────────────
@@ -1418,6 +1753,12 @@
       return;
     }
 
+    // Special: bucketed histogram drawn as a heatmap
+    if (def.display === 'heatmap') {
+      renderHeatmap(def, parsed);
+      return;
+    }
+
     // Special: uptime text display
     if (def.display === 'uptime') {
       const s = parsed.series[0];
@@ -1523,6 +1864,75 @@
     }
   }
 
+  // ── Admin panel ───────────────────────────────────────────────────────────────
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[c]));
+  }
+
+  function openAdminModal() {
+    $("admin-modal-overlay").classList.add("open");
+    const msg = $("admin-message");
+    msg.classList.remove("show");
+    msg.textContent = "";
+    loadAdminData();
+  }
+
+  function closeAdminModal() {
+    $("admin-modal-overlay").classList.remove("open");
+  }
+
+  async function adminAction(action, id, hostname) {
+    await fetch("/admin/nodes/" + action, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, hostname }),
+    });
+    loadAdminData();
+    loadNodes();
+  }
+
+  function renderAdminPending(pending) {
+    const list = $("admin-pending-list");
+    if (!pending.length) {
+      list.innerHTML = '<div class="admin-empty">No pending nodes.</div>';
+      return;
+    }
+    list.innerHTML = pending.map((n) =>
+      '<div class="admin-row" data-id="' + escapeHtml(n.id) + '" data-hostname="' + escapeHtml(n.hostname) + '">' +
+      '<span class="admin-row-name">' + escapeHtml(n.hostname) + '</span>' +
+      '<button class="admin-btn approve" data-action="approve">Approve</button>' +
+      '<button class="admin-btn reject" data-action="reject">Reject</button>' +
+      '</div>'
+    ).join("");
+    list.querySelectorAll(".admin-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const row = btn.closest(".admin-row");
+        adminAction(btn.dataset.action, row.dataset.id, row.dataset.hostname);
+      });
+    });
+  }
+
+  function renderAdminApproved(approved) {
+    const sel = $("admin-delete-select");
+    const sorted = approved.slice().sort((a, b) => a.hostname.localeCompare(b.hostname));
+    sel.innerHTML = sorted.length
+      ? sorted.map((n) => '<option value="' + escapeHtml(n.id) + '" data-hostname="' + escapeHtml(n.hostname) + '">' + escapeHtml(n.hostname) + '</option>').join("")
+      : '<option value="">No approved nodes</option>';
+  }
+
+  async function loadAdminData() {
+    try {
+      const data = await apiFetch("/admin/nodes");
+      renderAdminPending(data.pending || []);
+      renderAdminApproved(data.approved || []);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────────────
 
   $("node-select").addEventListener("change", (e) => {
@@ -1544,6 +1954,22 @@
       resetCharts();
       startPolling();
     }
+  });
+
+  $("admin-btn").addEventListener("click", openAdminModal);
+  $("admin-close-btn").addEventListener("click", closeAdminModal);
+  $("admin-modal-overlay").addEventListener("click", (e) => {
+    if (e.target === $("admin-modal-overlay")) closeAdminModal();
+  });
+  $("admin-delete-btn").addEventListener("click", async () => {
+    const sel = $("admin-delete-select");
+    const opt = sel.selectedOptions[0];
+    if (!opt || !opt.value) return;
+    const hostname = opt.dataset.hostname;
+    await adminAction("delete", opt.value, hostname);
+    const msg = $("admin-message");
+    msg.textContent = hostname + " has been deleted from active Node list";
+    msg.classList.add("show");
   });
 
   buildTimeRangeUI();
