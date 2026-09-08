@@ -7,6 +7,7 @@ window.CHARTS.cpu_interrupts = {
   unit:    'K/s',
   divisor: 1000,
   stacked: true,
+  fullWidth: true,
   colors:  [],
   noStats: true,
   nav:     { group: 'System', section: 'Compute' },

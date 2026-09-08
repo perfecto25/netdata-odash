@@ -7,6 +7,7 @@ window.CHARTS.cpu = {
   unit:    '%',
   yMax:    100,
   stacked: true,
+  fullWidth: true,
   colors:  ['#00d4ff', '#22c55e', '#eab308', '#ef4444', '#a855f7', '#f97316', '#06b6d4', '#84cc16'],
   nav:     { group: 'System', section: 'Compute' },
 };
