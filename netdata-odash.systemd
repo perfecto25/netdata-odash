@@ -6,7 +6,17 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/netdata-odash --netdata-port 19999 --odash-port 8080
+
+# Creates /var/lib/netdata-odash and exports $STATE_DIRECTORY, where the node
+# approval list is kept. Without it the store falls back to a path relative to
+# the working directory, which systemd sets to /.
+StateDirectory=netdata-odash
+
+# 127.0.0.1 rather than the localhost name: if the local netdata listens on
+# IPv4 only, resolving localhost to ::1 first would fail to connect.
+Environment=NETDATA_URL=http://127.0.0.1:19999
+
+ExecStart=/usr/local/bin/netdata-odash --odash-port 8080
 Restart=always
 RestartSec=10
 StandardOutput=journal
