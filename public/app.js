@@ -469,7 +469,15 @@
   async function apiFetch(path, qs) {
     const params = qs ? new URLSearchParams(qs).toString() : "";
     const r = await fetch(path + (params ? "?" + params : ""));
-    if (!r.ok) throw new Error(r.statusText);
+    if (!r.ok) {
+      // Surface the server's own {"error": ...} — it says far more than the status.
+      let detail = r.statusText;
+      try {
+        const body = await r.json();
+        if (body && body.error) detail = body.error;
+      } catch (e) { /* non-JSON error body */ }
+      throw new Error(detail);
+    }
     return r.json();
   }
 
@@ -497,7 +505,7 @@
         selectNode(nodes[0].hostname);
       }
     } catch (e) {
-      setStatus("Cannot reach Netdata", "err");
+      setStatus("Cannot load nodes: " + (e && e.message ? e.message : e), "err");
       console.error(e);
     }
   }
