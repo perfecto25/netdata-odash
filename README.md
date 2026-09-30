@@ -99,6 +99,13 @@ You must approve each node before they show up, by going to Admin button (next t
 You can also delete nodes from Drop down via the same admin interface
 
 
+## LM Sensors data
+
+For temperature data, Netdata config must have debugfs plugin enabled
+
+    [plugins]
+      debugfs = yes
+
 
 ## Build from source
 
@@ -139,6 +146,11 @@ You can contribute to this project by forking this repo and submitting a PR
 - [mreider](https://github.com/perfecto25) - creator and maintainer
 
 #### Release Notes
+
+### 0.1.3
+
+  - chart y axis fixes
+  - sensors data fixes
 
 ### 0.1.2
 
