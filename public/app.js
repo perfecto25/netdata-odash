@@ -893,14 +893,12 @@
             const hh = d.getHours().toString().padStart(2, '0');
             const mm = d.getMinutes().toString().padStart(2, '0');
             const ss = d.getSeconds().toString().padStart(2, '0');
-            const dp = displayUnit === 'GiB' ? 2 : 1;
-
             let html = '<div style="color:#6b7280;margin-bottom:5px;font-size:11px">' + hh + ':' + mm + ':' + ss + '</div>';
             u.series.slice(1).forEach(function(s, i) {
               const col = (seriesColors && seriesColors[i]) || '#00d4ff';
               const dataArr = rawRef ? rawRef.series[i] : u.data[i + 1];
               const v   = dataArr && dataArr[idx];
-              const val = v == null ? '—' : v.toFixed(dp);
+              const val = fmtNum(v);
               html += '<div style="display:flex;align-items:center;gap:6px;margin-top:3px">' +
                 '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;flex-shrink:0;background:' + col + '"></span>' +
                 '<span style="color:#9ca3af">' + s.label + '</span>' +
@@ -942,6 +940,53 @@
         d.getMinutes().toString().padStart(2, "0")
       );
     });
+  }
+
+  // Adaptive precision for stats/tooltips: small rates like 0.02 events/s must
+  // not collapse to "0.0", and large counts get a K/M/G suffix to stay short.
+  function fmtNum(v) {
+    if (v == null || !isFinite(v)) return "—";
+    const a = Math.abs(v);
+    if (a === 0) return "0";
+    if (a >= 1e9) return (v / 1e9).toFixed(2) + "G";
+    if (a >= 1e6) return (v / 1e6).toFixed(2) + "M";
+    if (a >= 1e4) return (v / 1e3).toFixed(1) + "K";
+    if (a >= 100) return v.toFixed(0);
+    if (a >= 10)  return v.toFixed(1);
+    if (a >= 1)   return v.toFixed(2);
+    // Two significant digits below 1 (0.023, 0.0041, ...)
+    return v.toFixed(Math.min(8, 1 - Math.floor(Math.log10(a))));
+  }
+
+  // Y tick labels: pick a K/M/G suffix from the largest tick, and enough
+  // decimals from the tick increment that adjacent labels are distinct.
+  function fmtYTicks(displayUnit) {
+    return (u, splits, axisIdx, space, incr) => {
+      const maxAbs = Math.max(0, ...splits.map((v) => Math.abs(v || 0)));
+      const [div, sfx] =
+        maxAbs >= 1e9 ? [1e9, "G"] :
+        maxAbs >= 1e6 ? [1e6, "M"] :
+        maxAbs >= 1e4 ? [1e3, "K"] : [1, ""];
+      const step = (incr || maxAbs || 1) / div;
+      let dp = 0;
+      while (dp < 8 && Math.abs(Math.round(step * 10 ** dp) - step * 10 ** dp) > 1e-6 * 10 ** dp) dp++;
+      return splits.map((v) =>
+        v == null ? "" : v === 0 ? "0 " + displayUnit : (v / div).toFixed(dp) + sfx + " " + displayUnit,
+      );
+    };
+  }
+
+  // Size the Y axis to its widest label so labels are never clipped.
+  function yAxisSize(u, values, axisIdx, cycleNum) {
+    const axis = u.axes[axisIdx];
+    if (cycleNum > 1) return axis._size;
+    let size = axis.ticks.size + axis.gap;
+    const longest = (values || []).reduce((acc, v) => (v.length > acc.length ? v : acc), "");
+    if (longest !== "") {
+      u.ctx.font = axis.font[0];
+      size += u.ctx.measureText(longest).width / (window.devicePixelRatio || 1);
+    }
+    return Math.ceil(size) + 4;
   }
 
   function makeSeriesDef(label, color, stacked) {
@@ -989,13 +1034,8 @@
           stroke: "#6b7280",
           grid: { stroke: "#2a2d3a" },
           ticks: { stroke: "#2a2d3a" },
-          size: 95,
-          values: (u, vals) =>
-            vals.map((v) =>
-              v == null
-                ? ""
-                : v.toFixed(displayUnit === "GiB" ? 2 : 1) + " " + displayUnit,
-            ),
+          size: yAxisSize,
+          values: fmtYTicks(displayUnit),
         },
       ],
       scales: {
@@ -1796,7 +1836,6 @@
       const statPalette = def.colors && def.colors.length ? def.colors : DEFAULT_COLORS;
       const statColor = statPalette[statIdx % statPalette.length];
       const { cur, avg, max } = computeStats(scaledSeries, statIdx);
-      const dp = displayUnit === "GiB" ? 2 : 1;
 
       function stat(label, val, color) {
         return (
@@ -1806,7 +1845,7 @@
           '<div class="stat-value"' +
           (color ? ' style="color:' + color + '"' : "") +
           ">" +
-          val.toFixed(dp) +
+          fmtNum(val) +
           '<small style="font-size:12px;color:var(--muted)"> ' +
           displayUnit +
           "</small>" +

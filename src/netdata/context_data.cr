@@ -87,13 +87,15 @@ def handle_sensordata(ctx : HTTP::Server::Context)
   points   = params["points"]? || "300"
 
   begin
-    unless SENSOR_CATEGORIES.includes?(category)
+    source = sensor_source(node_contexts(node), category)
+    unless source
       ctx.response.print EMPTY_SERIES.to_json
       return
     end
 
+    context, group_label = source
     ctx.response.print context_series(
-      node, sensor_context(category), "chip_id",
+      node, context, group_label,
       SENSOR_AGGREGATION[category]? || "avg", after, points).to_json
   rescue ex
     ctx.response.status = HTTP::Status::BAD_GATEWAY

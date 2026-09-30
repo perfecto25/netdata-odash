@@ -7,6 +7,6 @@ window.CHARTS.sensor_temperature_histogram = {
   chart:    'sensors.temperature_histogram',
   unit:     '°C',
   display:  'heatmap',
-  requires: 'sensor.temperature',
+  requires: 'sensor.temperature_histogram',
   nav:      { group: 'Sensors', section: 'Temperature' },
 };
